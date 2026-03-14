@@ -259,6 +259,19 @@ static bool eval_f_expr(const char *expr, double x, double *out, char *err, size
     return eval_expr(expr, x, out, err, err_sz);
 }
 
+static bool estimar_derivada(const char *expr_g, double x, double *gprime, char *err, size_t err_sz) {
+    double h = 1e-6 * (1.0 + fabs(x));
+    double gp, gm;
+    if (!eval_expr(expr_g, x + h, &gp, err, err_sz)) return false;
+    if (!eval_expr(expr_g, x - h, &gm, err, err_sz)) return false;
+    *gprime = (gp - gm) / (2.0 * h);
+    if (!isfinite(*gprime)) {
+        snprintf(err, err_sz, "No se pudo estimar g'(x) de forma numerica");
+        return false;
+    }
+    return true;
+}
+
 static int biseccion(
     const char *expr_f,
     double a,
@@ -268,17 +281,40 @@ static int biseccion(
     IterBiseccion *historial,
     int *n_historial,
     double *raiz,
+    char *justif,
+    size_t justif_sz,
     char *err,
     size_t err_sz
 ) {
+    double a0 = a;
+    double b0 = b;
     double fa, fb;
-    if (!eval_f_expr(expr_f, a, &fa, err, err_sz) || !eval_f_expr(expr_f, b, &fb, err, err_sz)) return -3;
+    if (!eval_f_expr(expr_f, a, &fa, err, err_sz)) {
+        snprintf(err, err_sz, "No se pudo evaluar f(a) en a=%.10g", a);
+        return -3;
+    }
+    if (!eval_f_expr(expr_f, b, &fb, err, err_sz)) {
+        snprintf(err, err_sz, "No se pudo evaluar f(b) en b=%.10g", b);
+        return -3;
+    }
     if (fa * fb > 0.0) return -1;
 
     for (int i = 1; i <= max_iter; i++) {
         double c = 0.5 * (a + b);
         double fc;
-        if (!eval_f_expr(expr_f, c, &fc, err, err_sz)) return -3;
+        if (!eval_f_expr(expr_f, c, &fc, err, err_sz)) {
+            int n_prev = i - 1;
+            *n_historial = n_prev;
+            *raiz = 0.5 * (a + b);
+            snprintf(
+                justif,
+                justif_sz,
+                "Se detuvo por error de evaluacion en iter %d: no se pudo calcular f(c) con c=%.10g.",
+                i,
+                c
+            );
+            return 2;
+        }
         double error = 0.5 * fabs(b - a);
 
         historial[i - 1].iter = i;
@@ -291,6 +327,7 @@ static int biseccion(
         if (fabs(fc) < tol || error < tol) {
             *n_historial = i;
             *raiz = c;
+            snprintf(justif, justif_sz, "Convergio: se cumplio |f(c)| < tol o error < tol en la iteracion %d.", i);
             return 0;
         }
         if (fa * fc < 0.0) {
@@ -303,6 +340,17 @@ static int biseccion(
     }
     *n_historial = max_iter;
     *raiz = 0.5 * (a + b);
+    {
+        double ancho0 = fabs(b0 - a0);
+        double requerido = (ancho0 > 0.0 && tol > 0.0) ? ceil(log2(ancho0 / tol)) : (double)max_iter;
+        snprintf(
+            justif,
+            justif_sz,
+            "No convergio: se alcanzo max_iter=%d. Para este intervalo y tolerancia, se estiman %.0f iteraciones de biseccion.",
+            max_iter,
+            requerido
+        );
+    }
     return 1;
 }
 
@@ -316,16 +364,44 @@ static int punto_fijo(
     int *n_historial,
     double *raiz,
     double *residuo_final,
+    char *justif,
+    size_t justif_sz,
     char *err,
     size_t err_sz
 ) {
     double xn = x0;
     for (int i = 1; i <= max_iter; i++) {
         double x_next;
-        if (!eval_expr(expr_g, xn, &x_next, err, err_sz)) return -3;
+        if (!eval_expr(expr_g, xn, &x_next, err, err_sz)) {
+            int n_prev = i - 1;
+            *n_historial = n_prev;
+            *raiz = xn;
+            *residuo_final = (n_prev > 0) ? historial[n_prev - 1].residual : 0.0;
+            snprintf(
+                justif,
+                justif_sz,
+                "Se detuvo por error de evaluacion en iter %d: no se pudo calcular g(x_n) con x_n=%.10g.",
+                i,
+                xn
+            );
+            return 2;
+        }
         double error = fabs(x_next - xn);
         double residual;
-        if (!eval_expr(expr_f, x_next, &residual, err, err_sz)) return -3;
+        if (!eval_expr(expr_f, x_next, &residual, err, err_sz)) {
+            int n_prev = i - 1;
+            *n_historial = n_prev;
+            *raiz = xn;
+            *residuo_final = (n_prev > 0) ? historial[n_prev - 1].residual : 0.0;
+            snprintf(
+                justif,
+                justif_sz,
+                "Se detuvo por error de evaluacion en iter %d: no se pudo calcular f(x_n+1) con x_n+1=%.10g.",
+                i,
+                x_next
+            );
+            return 2;
+        }
         residual = fabs(residual);
 
         historial[i - 1].iter = i;
@@ -338,6 +414,7 @@ static int punto_fijo(
             *n_historial = i;
             *raiz = x_next;
             *residuo_final = residual;
+            snprintf(justif, justif_sz, "Convergio: se cumplio |x_n+1 - x_n| < tol en la iteracion %d.", i);
             return 0;
         }
 
@@ -349,13 +426,45 @@ static int punto_fijo(
     double fr;
     if (!eval_expr(expr_f, *raiz, &fr, err, err_sz)) return -3;
     *residuo_final = fabs(fr);
+    {
+        double gprime;
+        char derr[160] = {0};
+        if (estimar_derivada(expr_g, *raiz, &gprime, derr, sizeof(derr))) {
+            if (fabs(gprime) >= 1.0) {
+                snprintf(
+                    justif,
+                    justif_sz,
+                    "No convergio: se alcanzo max_iter=%d y |g'(x)|≈%.4f >= 1 cerca de la ultima aproximacion.",
+                    max_iter,
+                    fabs(gprime)
+                );
+            } else {
+                snprintf(
+                    justif,
+                    justif_sz,
+                    "No convergio: se alcanzo max_iter=%d. Se estimo |g'(x)|≈%.4f (<1), probablemente faltaron iteraciones o un x0 mas cercano.",
+                    max_iter,
+                    fabs(gprime)
+                );
+            }
+        } else {
+            snprintf(
+                justif,
+                justif_sz,
+                "No convergio: se alcanzo max_iter=%d y no se pudo estimar g'(x) cerca de la ultima aproximacion.",
+                max_iter
+            );
+        }
+    }
     return 1;
 }
 
-static void print_biseccion_json(const IterBiseccion *h, int n, double raiz, double residuo, int estado) {
+static void print_biseccion_json(const IterBiseccion *h, int n, double raiz, double residuo, const char *justif, int estado) {
     printf("{\"ok\":true,\"metodo\":\"biseccion\",");
     printf("\"raiz\":%.17g,\"iteraciones\":%d,\"residuo\":%.17g,", raiz, n, residuo);
     printf("\"convergio\":%s,", estado == 0 ? "true" : "false");
+    printf("\"terminado_por_error\":%s,", estado == 2 ? "true" : "false");
+    printf("\"justificacion\":\"%s\",", justif);
     printf("\"historial\":[");
     for (int i = 0; i < n; i++) {
         if (i > 0) printf(",");
@@ -367,10 +476,12 @@ static void print_biseccion_json(const IterBiseccion *h, int n, double raiz, dou
     printf("]}\n");
 }
 
-static void print_punto_fijo_json(const IterPuntoFijo *h, int n, double raiz, double residuo, int estado) {
+static void print_punto_fijo_json(const IterPuntoFijo *h, int n, double raiz, double residuo, const char *justif, int estado) {
     printf("{\"ok\":true,\"metodo\":\"punto_fijo\",");
     printf("\"raiz\":%.17g,\"iteraciones\":%d,\"residuo\":%.17g,", raiz, n, residuo);
     printf("\"convergio\":%s,", estado == 0 ? "true" : "false");
+    printf("\"terminado_por_error\":%s,", estado == 2 ? "true" : "false");
+    printf("\"justificacion\":\"%s\",", justif);
     printf("\"historial\":[");
     for (int i = 0; i < n; i++) {
         if (i > 0) printf(",");
@@ -414,9 +525,10 @@ int main(int argc, char **argv) {
         }
 
         char err[160] = {0};
+        char justif[320] = {0};
         int n = 0;
         double raiz = NAN;
-        int estado = biseccion(expr_f, a, b, tol, max_iter, hist, &n, &raiz, err, sizeof(err));
+        int estado = biseccion(expr_f, a, b, tol, max_iter, hist, &n, &raiz, justif, sizeof(justif), err, sizeof(err));
         if (estado == -1) {
             free(hist);
             print_error_json("f(a) y f(b) tienen el mismo signo");
@@ -428,12 +540,15 @@ int main(int argc, char **argv) {
             return 1;
         }
         double residuo;
-        if (!eval_expr(expr_f, raiz, &residuo, err, sizeof(err))) {
+        if (estado != 2 && !eval_expr(expr_f, raiz, &residuo, err, sizeof(err))) {
             free(hist);
             print_error_json(err[0] ? err : "Error evaluando residuo");
             return 1;
         }
-        print_biseccion_json(hist, n, raiz, fabs(residuo), estado);
+        if (estado == 2) {
+            residuo = (n > 0) ? fabs(hist[n - 1].fc) : 0.0;
+        }
+        print_biseccion_json(hist, n, raiz, fabs(residuo), justif, estado);
         free(hist);
         return 0;
     }
@@ -467,17 +582,18 @@ int main(int argc, char **argv) {
         }
 
         char err[160] = {0};
+        char justif[320] = {0};
         int n = 0;
         double raiz = NAN;
         double residuo = NAN;
-        int estado = punto_fijo(expr_g, expr_f, x0, tol, max_iter, hist, &n, &raiz, &residuo, err, sizeof(err));
+        int estado = punto_fijo(expr_g, expr_f, x0, tol, max_iter, hist, &n, &raiz, &residuo, justif, sizeof(justif), err, sizeof(err));
         if (estado == -3) {
             free(hist);
             print_error_json(err[0] ? err : "Error evaluando expresiones");
             return 1;
         }
 
-        print_punto_fijo_json(hist, n, raiz, residuo, estado);
+        print_punto_fijo_json(hist, n, raiz, residuo, justif, estado);
         free(hist);
         return 0;
     }
