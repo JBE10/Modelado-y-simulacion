@@ -128,7 +128,7 @@ TEMPLATE = """
         <div>
           <label>g(x) (solo punto fijo)</label>
           <input name="expr_g" value="{{ form.expr_g }}" />
-          <div class="hint">En punto fijo se itera <code>x(n+1)=g(x(n))</code>.</div>
+          <div class="hint">En punto fijo se itera <code>x(n+1)=g(x(n))</code>. Si lo dejas vacio, se usa <code>g(x)=x-f(x)</code>.</div>
         </div>
       </div>
 
@@ -173,6 +173,9 @@ TEMPLATE = """
       <p class="{{ 'ok' if result.convergio else 'error' }}" style="margin-top:10px">
         {{ "Convergio segun tolerancia." if result.convergio else "No convergio en el maximo de iteraciones." }}
       </p>
+      {% if result.g_auto %}
+      <p class="note"><strong>g(x) generada automaticamente:</strong> <code>{{ result.g_auto }}</code></p>
+      {% endif %}
       {% if result.justificacion %}
       <p class="note"><strong>Justificacion:</strong> {{ result.justificacion }}</p>
       {% endif %}
@@ -494,11 +497,19 @@ def index():
                     b = parse_float("b", form["b"])
                     result = biseccion_python(form["expr_f"], a, b, tol, max_iter)
             else:
-                if not form["expr_g"] or not form["expr_f"]:
-                    error = "Para punto fijo debes ingresar f(x) y g(x)."
+                if not form["expr_f"]:
+                    error = "Para punto fijo debes ingresar al menos f(x)."
                 else:
+                    expr_g_used = form["expr_g"]
+                    g_auto = False
+                    if not expr_g_used:
+                        expr_g_used = f"x - ({form['expr_f']})"
+                        form["expr_g"] = expr_g_used
+                        g_auto = True
                     x0 = parse_float("x0", form["x0"])
-                    result = punto_fijo_python(form["expr_f"], form["expr_g"], x0, tol, max_iter)
+                    result = punto_fijo_python(form["expr_f"], expr_g_used, x0, tol, max_iter)
+                    if g_auto:
+                        result["g_auto"] = expr_g_used
 
             if result is not None:
                 labels = [row["iter"] for row in result["historial"]]
