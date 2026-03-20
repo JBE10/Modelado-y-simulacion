@@ -47,6 +47,115 @@ def derivada_numerica(f, x):
     return (f(x + h) - f(x - h)) / (2.0 * h)
 
 
+def derivada_simbolica(expr_str):
+    """Devuelve f'(x) y g(x) como strings simbolicos usando sympy."""
+    import sympy
+    x = sympy.Symbol("x")
+    expr_str_norm = normalizar_expresion(expr_str)
+    replacements = {
+        "ln(": "log(",
+        "cbrt(": "(", 
+    }
+    expr_sym = expr_str_norm
+    for old, new in replacements.items():
+        expr_sym = expr_sym.replace(old, new)
+    if "cbrt" in expr_str_norm:
+        expr_sym = expr_str_norm.replace("cbrt(", "Pow(").replace(")", ", Rational(1,3))", 1)
+
+    try:
+        f_sym = sympy.sympify(expr_sym, locals={"x": x})
+        fp_sym = sympy.diff(f_sym, x)
+        fp_simplified = sympy.simplify(fp_sym)
+        g_sym = sympy.simplify(x - f_sym / fp_simplified)
+        return str(fp_simplified), str(g_sym)
+    except Exception:
+        return None, None
+
+
+def graficar_fx(f, raiz, x_min, x_max, expr_label="f(x)", n_puntos=400):
+    """Genera una grafica estilo GeoGebra: ejes, grilla, curva f(x), punto raiz."""
+    margen = max((x_max - x_min) * 0.3, 0.5)
+    xa = x_min - margen
+    xb = x_max + margen
+    paso = (xb - xa) / (n_puntos - 1)
+
+    datos = []
+    for idx in range(n_puntos):
+        xv = xa + idx * paso
+        try:
+            yv = f(xv)
+            if not isinstance(yv, complex) and math.isfinite(yv):
+                datos.append({"x": round(xv, 10), "f(x)": round(float(yv), 10)})
+        except Exception:
+            pass
+
+    if not datos:
+        return
+
+    df_fx = pd.DataFrame(datos)
+    y_vals = [d["f(x)"] for d in datos]
+    y_lo = min(y_vals)
+    y_hi = max(y_vals)
+    y_pad = max((y_hi - y_lo) * 0.1, 0.5)
+
+    curva = (
+        alt.Chart(df_fx)
+        .mark_line(strokeWidth=2.5, color="#2563eb")
+        .encode(
+            x=alt.X("x:Q", title="x", scale=alt.Scale(domain=[xa, xb])),
+            y=alt.Y("f(x):Q", title=expr_label, scale=alt.Scale(domain=[y_lo - y_pad, y_hi + y_pad])),
+            tooltip=[alt.Tooltip("x:Q", format=".6f"), alt.Tooltip("f(x):Q", format=".6e")],
+        )
+        .properties(height=400)
+    )
+
+    eje_x = (
+        alt.Chart(pd.DataFrame({"y": [0]}))
+        .mark_rule(color="#6b7280", strokeWidth=1.5, strokeDash=[4, 4])
+        .encode(y="y:Q")
+    )
+
+    eje_y = (
+        alt.Chart(pd.DataFrame({"x": [0]}))
+        .mark_rule(color="#6b7280", strokeWidth=1.5, strokeDash=[4, 4])
+        .encode(x="x:Q")
+    )
+
+    try:
+        fr = float(f(raiz))
+    except Exception:
+        fr = 0.0
+    df_raiz = pd.DataFrame({
+        "x": [raiz],
+        "f(x)": [fr],
+        "label": [f"raiz ≈ {raiz:.8f}"],
+    })
+
+    punto = (
+        alt.Chart(df_raiz)
+        .mark_point(size=180, color="#ef4444", filled=True, stroke="#ffffff", strokeWidth=1.5)
+        .encode(
+            x="x:Q",
+            y="f(x):Q",
+            tooltip=[alt.Tooltip("label:N"), alt.Tooltip("x:Q", format=".10f"), alt.Tooltip("f(x):Q", format=".4e")],
+        )
+    )
+
+    etiqueta = (
+        alt.Chart(df_raiz)
+        .mark_text(align="left", dx=12, dy=-12, fontSize=13, fontWeight="bold", color="#ef4444")
+        .encode(x="x:Q", y="f(x):Q", text="label:N")
+    )
+
+    chart = (curva + eje_x + eje_y + punto + etiqueta).configure_axis(
+        grid=True,
+        gridColor="#e5e7eb",
+        gridOpacity=0.4,
+    )
+
+    st.altair_chart(chart, use_container_width=True)
+
+
 st.set_page_config(page_title="Dashboard de Algoritmos Numericos", layout="wide")
 
 st.title("Dashboard de Algoritmos Numericos")
@@ -126,6 +235,16 @@ if algoritmo == "Biseccion":
             c2.metric("Iteraciones", f"{iters}")
             c3.metric("|f(raiz)|", f"{abs(f(raiz)):.4e}")
 
+            expr_norm = normalizar_expresion(res["expr"])
+            fp_str, g_str = derivada_simbolica(res["expr"])
+            if fp_str:
+                st.markdown("### Derivada y g(x)")
+                st.code(
+                    f"f(x)  = {expr_norm}\n"
+                    f"f'(x) = {fp_str}\n"
+                    f"g(x)  = x - f(x)/f'(x) = {g_str}"
+                )
+
             df_hist = pd.DataFrame(historial)
             if not df_hist.empty:
                 st.markdown("### Tabla de iteraciones")
@@ -149,26 +268,7 @@ if algoritmo == "Biseccion":
                     st.altair_chart(chart_err, width="stretch")
 
                 st.markdown("### Grafica de f(x)")
-                x_min = min(a_res, b_res)
-                x_max = max(a_res, b_res)
-                margen = max((x_max - x_min) * 0.2, 1e-3)
-                n_puntos = 250
-                paso = (x_max - x_min + 2 * margen) / (n_puntos - 1)
-                datos = []
-                for idx in range(n_puntos):
-                    xv = x_min - margen + idx * paso
-                    try:
-                        yv = f(xv)
-                        if not isinstance(yv, complex) and math.isfinite(yv):
-                            datos.append({"x": xv, "fx": float(yv)})
-                    except Exception:
-                        pass
-                if datos:
-                    df_fx = pd.DataFrame(datos)
-                    curva = alt.Chart(df_fx).mark_line().encode(x="x:Q", y="fx:Q", tooltip=["x", "fx"]).properties(height=320)
-                    eje = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="gray").encode(y="y:Q")
-                    pt = alt.Chart(pd.DataFrame({"x": [raiz], "fx": [f(raiz)]})).mark_point(color="red", size=100).encode(x="x:Q", y="fx:Q")
-                    st.altair_chart(curva + eje + pt, width="stretch")
+                graficar_fx(f, raiz, min(a_res, b_res), max(a_res, b_res), expr_label=res["expr"])
 
         except Exception as error:
             st.error(f"Error: {error}")
@@ -346,26 +446,7 @@ if algoritmo == "Punto Fijo":
                     st.altair_chart(chart_err, width="stretch")
 
                 st.markdown("### Grafica de f(x)")
-                x0_res = res["x0"]
-                x_min = min(x0_res, raiz) - 1.0
-                x_max = max(x0_res, raiz) + 1.0
-                n_puntos = 250
-                paso = (x_max - x_min) / (n_puntos - 1)
-                datos = []
-                for idx in range(n_puntos):
-                    xv = x_min + idx * paso
-                    try:
-                        yv = f_fn(xv)
-                        if not isinstance(yv, complex) and math.isfinite(yv):
-                            datos.append({"x": xv, "fx": float(yv)})
-                    except Exception:
-                        pass
-                if datos:
-                    df_fx = pd.DataFrame(datos)
-                    curva = alt.Chart(df_fx).mark_line().encode(x="x:Q", y="fx:Q", tooltip=["x", "fx"]).properties(height=320)
-                    eje = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="gray").encode(y="y:Q")
-                    pt = alt.Chart(pd.DataFrame({"x": [raiz], "fx": [f_fn(raiz)]})).mark_point(color="red", size=100).encode(x="x:Q", y="fx:Q")
-                    st.altair_chart(curva + eje + pt, width="stretch")
+                graficar_fx(f_fn, raiz, res["x0"] - 1.0, res["x0"] + 1.0, expr_label=res["expr_f"])
 
         except Exception as error:
             st.error(f"Error: {error}")
@@ -424,8 +505,6 @@ if algoritmo == "Newton-Raphson":
             iters = res["iteraciones"]
             historial = res["historial"]
 
-            st.code("x_{n+1} = x_n - f(x_n) / f'(x_n)")
-
             if res.get("derivada_numerica"):
                 st.info("f'(x) se estima numericamente con diferencia centrada.")
 
@@ -441,6 +520,22 @@ if algoritmo == "Newton-Raphson":
                 c3.metric("|f(raiz)|", f"{abs(f_fn(raiz)):.4e}")
             except Exception:
                 c3.metric("|f(raiz)|", "N/A")
+
+            expr_f_norm = normalizar_expresion(res["expr_f"])
+            st.markdown("### Derivada y g(x)")
+            try:
+                df_x0 = derivada_numerica(f_fn, res["x0"])
+                df_r = derivada_numerica(f_fn, raiz)
+                st.code(
+                    f"f(x)  = {expr_f_norm}\n"
+                    f"f'(x) ≈ (f(x+h)-f(x-h))/(2h),  h = 1e-6*(1+|x|)\n"
+                    f"g(x)  = x - f(x)/f'(x)  =  x - ({expr_f_norm}) / f'(x)\n"
+                    f"\n"
+                    f"f'(x0={res['x0']})  ≈ {df_x0:.6e}\n"
+                    f"f'(raiz)    ≈ {df_r:.6e}"
+                )
+            except Exception:
+                pass
 
             df_hist = pd.DataFrame(historial)
             if not df_hist.empty:
@@ -465,26 +560,7 @@ if algoritmo == "Newton-Raphson":
                     st.altair_chart(chart_err, width="stretch")
 
                 st.markdown("### Grafica de f(x)")
-                x0_res = res["x0"]
-                x_min = min(x0_res, raiz) - 1.0
-                x_max = max(x0_res, raiz) + 1.0
-                n_puntos = 250
-                paso = (x_max - x_min) / (n_puntos - 1)
-                datos = []
-                for idx in range(n_puntos):
-                    xv = x_min + idx * paso
-                    try:
-                        yv = f_fn(xv)
-                        if not isinstance(yv, complex) and math.isfinite(yv):
-                            datos.append({"x": xv, "fx": float(yv)})
-                    except Exception:
-                        pass
-                if datos:
-                    df_fx = pd.DataFrame(datos)
-                    curva = alt.Chart(df_fx).mark_line().encode(x="x:Q", y="fx:Q", tooltip=["x", "fx"]).properties(height=320)
-                    eje = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="gray").encode(y="y:Q")
-                    pt = alt.Chart(pd.DataFrame({"x": [raiz], "fx": [f_fn(raiz)]})).mark_point(color="red", size=100).encode(x="x:Q", y="fx:Q")
-                    st.altair_chart(curva + eje + pt, width="stretch")
+                graficar_fx(f_fn, raiz, min(res["x0"], raiz) - 1.0, max(res["x0"], raiz) + 1.0, expr_label=res["expr_f"])
 
         except Exception as error:
             st.error(f"Error: {error}")
@@ -550,6 +626,24 @@ if algoritmo == "Secante":
             except Exception:
                 c3.metric("|f(raiz)|", "N/A")
 
+            expr_f_norm = normalizar_expresion(res["expr_f"])
+            st.markdown("### Derivada y g(x)")
+            try:
+                df_x0 = derivada_numerica(f_fn, res["x0"])
+                df_x1 = derivada_numerica(f_fn, res["x1"])
+                df_r = derivada_numerica(f_fn, raiz)
+                st.code(
+                    f"f(x)  = {expr_f_norm}\n"
+                    f"f'(x) ≈ (f(x+h)-f(x-h))/(2h),  h = 1e-6*(1+|x|)\n"
+                    f"g(x)  = x - f(x)/f'(x)  =  x - ({expr_f_norm}) / f'(x)\n"
+                    f"\n"
+                    f"f'(x0={res['x0']})  ≈ {df_x0:.6e}\n"
+                    f"f'(x1={res['x1']})  ≈ {df_x1:.6e}\n"
+                    f"f'(raiz)    ≈ {df_r:.6e}"
+                )
+            except Exception:
+                pass
+
             df_hist = pd.DataFrame(historial)
             if not df_hist.empty:
                 st.markdown("### Tabla de iteraciones")
@@ -573,25 +667,7 @@ if algoritmo == "Secante":
                     st.altair_chart(chart_err, width="stretch")
 
                 st.markdown("### Grafica de f(x)")
-                x_min = min(res["x0"], res["x1"], raiz) - 1.0
-                x_max = max(res["x0"], res["x1"], raiz) + 1.0
-                n_puntos = 250
-                paso = (x_max - x_min) / (n_puntos - 1)
-                datos = []
-                for idx in range(n_puntos):
-                    xv = x_min + idx * paso
-                    try:
-                        yv = f_fn(xv)
-                        if not isinstance(yv, complex) and math.isfinite(yv):
-                            datos.append({"x": xv, "fx": float(yv)})
-                    except Exception:
-                        pass
-                if datos:
-                    df_fx = pd.DataFrame(datos)
-                    curva = alt.Chart(df_fx).mark_line().encode(x="x:Q", y="fx:Q", tooltip=["x", "fx"]).properties(height=320)
-                    eje = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="gray").encode(y="y:Q")
-                    pt = alt.Chart(pd.DataFrame({"x": [raiz], "fx": [f_fn(raiz)]})).mark_point(color="red", size=100).encode(x="x:Q", y="fx:Q")
-                    st.altair_chart(curva + eje + pt, width="stretch")
+                graficar_fx(f_fn, raiz, min(res["x0"], res["x1"], raiz) - 1.0, max(res["x0"], res["x1"], raiz) + 1.0, expr_label=res["expr_f"])
 
         except Exception as error:
             st.error(f"Error: {error}")
