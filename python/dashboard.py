@@ -7,6 +7,7 @@ import streamlit as st
 from biseccion import biseccion
 from newton_raphson import newton_raphson
 from punto_fijo import punto_fijo
+from secante import secante
 
 
 def cbrt_safe(x):
@@ -57,7 +58,7 @@ st.markdown(
 
 with st.sidebar:
     st.header("Algoritmos")
-    algoritmo = st.selectbox("Selecciona un algoritmo", ["Biseccion", "Punto Fijo", "Newton-Raphson"])
+    algoritmo = st.selectbox("Selecciona un algoritmo", ["Biseccion", "Punto Fijo", "Newton-Raphson", "Secante"])
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +191,7 @@ if algoritmo == "Punto Fijo":
         with col2:
             tol_pf = st.number_input("Tolerancia", value=1e-7, min_value=1e-15, format="%.15f", key="tol_pf")
             max_iter_pf = st.number_input("Maximo de iteraciones", value=100, min_value=1, step=1, key="max_iter_pf")
+            usar_aitken = st.checkbox("Aplicar aceleracion de Aitken", value=False, key="aitken_pf")
 
         ejecutar_pf = st.form_submit_button("Calcular", type="primary")
 
@@ -229,6 +231,7 @@ if algoritmo == "Punto Fijo":
                 res["expr_g_usado"] = expr_g_usado
                 res["g_auto"] = g_auto
                 res["usa_derivada_numerica"] = usa_derivada_numerica
+                res["usar_aitken"] = usar_aitken
                 res["x0"] = x0
                 st.session_state["resultado_punto_fijo"] = res
 
@@ -268,6 +271,59 @@ if algoritmo == "Punto Fijo":
                 c3.metric("|f(raiz)|", "N/A")
 
             df_hist = pd.DataFrame(historial)
+
+            if res.get("usar_aitken") and len(historial) >= 3:
+                st.markdown("### Aceleracion de Aitken")
+                st.code(
+                    "x̂_n = x_n - (x_{n+1} - x_n)^2 / (x_{n+2} - 2*x_{n+1} + x_n)"
+                )
+                x_seq = [historial[0]["x_n"]] + [h["x_n+1"] for h in historial]
+                aitken_rows = []
+                for k in range(len(x_seq) - 2):
+                    x0a = x_seq[k]
+                    x1a = x_seq[k + 1]
+                    x2a = x_seq[k + 2]
+                    denom = x2a - 2.0 * x1a + x0a
+                    if abs(denom) < 1e-14:
+                        x_hat = None
+                        err_aitken = None
+                    else:
+                        x_hat = x0a - (x1a - x0a) ** 2 / denom
+                        err_aitken = abs(x_hat - x0a)
+                    aitken_rows.append({
+                        "n": k,
+                        "x_n": x0a,
+                        "x_{n+1}": x1a,
+                        "x_{n+2}": x2a,
+                        "x̂_n (Aitken)": x_hat,
+                        "error_aitken": err_aitken,
+                    })
+                df_aitken = pd.DataFrame(aitken_rows)
+                st.dataframe(df_aitken, width="stretch", hide_index=True)
+
+                aitken_valid = [r for r in aitken_rows if r["x̂_n (Aitken)"] is not None]
+                if aitken_valid:
+                    best = min(aitken_valid, key=lambda r: r["error_aitken"])
+                    st.caption(f"Mejor aproximacion Aitken: x̂ ≈ {best['x̂_n (Aitken)']:.12f}  (error ≈ {best['error_aitken']:.4e})")
+
+                    df_cmp = pd.DataFrame({
+                        "n": list(range(len(aitken_valid))),
+                        "original": [r["x_{n+1}"] for r in aitken_valid],
+                        "aitken": [r["x̂_n (Aitken)"] for r in aitken_valid],
+                    })
+                    df_melt = df_cmp.melt("n", var_name="serie", value_name="valor")
+                    chart_cmp = (
+                        alt.Chart(df_melt).mark_line(point=True)
+                        .encode(
+                            x=alt.X("n:Q", title="n"),
+                            y=alt.Y("valor:Q", title="Aproximacion"),
+                            color=alt.Color("serie:N"),
+                            tooltip=["n", "serie", "valor"],
+                        )
+                        .properties(height=280)
+                    )
+                    st.altair_chart(chart_cmp, width="stretch")
+
             if not df_hist.empty:
                 st.markdown("### Tabla de iteraciones")
                 st.dataframe(df_hist, width="stretch", hide_index=True)
@@ -368,6 +424,8 @@ if algoritmo == "Newton-Raphson":
             iters = res["iteraciones"]
             historial = res["historial"]
 
+            st.code("x_{n+1} = x_n - f(x_n) / f'(x_n)")
+
             if res.get("derivada_numerica"):
                 st.info("f'(x) se estima numericamente con diferencia centrada.")
 
@@ -431,5 +489,112 @@ if algoritmo == "Newton-Raphson":
         except Exception as error:
             st.error(f"Error: {error}")
 
+# ---------------------------------------------------------------------------
+#  SECANTE
+# ---------------------------------------------------------------------------
+if algoritmo == "Secante":
+    st.subheader("Metodo de la Secante")
+
+    with st.form("form_secante"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            expr_f_s = st.text_input("f(x)", value="x**3 - x - 2", key="f_secante")
+            x0_s = st.number_input("x0", value=1.0, format="%.10f", key="x0_secante")
+            x1_s = st.number_input("x1", value=2.0, format="%.10f", key="x1_secante")
+
+        with col2:
+            tol_s = st.number_input("Tolerancia", value=1e-7, min_value=1e-15, format="%.15f", key="tol_secante")
+            max_iter_s = st.number_input("Maximo de iteraciones", value=100, min_value=1, step=1, key="max_iter_secante")
+
+        ejecutar_s = st.form_submit_button("Calcular", type="primary")
+
+    if ejecutar_s or "resultado_secante" in st.session_state:
+        try:
+            if ejecutar_s:
+                if not expr_f_s.strip():
+                    st.error("Debes ingresar f(x).")
+                    st.stop()
+
+                f_fn = crear_funcion(expr_f_s)
+                res = secante(
+                    f_fn, x0_s, x1_s,
+                    tol=tol_s, max_iter=int(max_iter_s),
+                    devolver_historial=True,
+                )
+                res["expr_f"] = expr_f_s
+                res["x0"] = x0_s
+                res["x1"] = x1_s
+                st.session_state["resultado_secante"] = res
+
+            res = st.session_state["resultado_secante"]
+            f_fn = crear_funcion(res["expr_f"])
+            raiz = res["raiz"]
+            iters = res["iteraciones"]
+            historial = res["historial"]
+
+            st.code(
+                "x_{n+1} = x_n - f(x_n) * (x_n - x_{n-1}) / (f(x_n) - f(x_{n-1}))"
+            )
+
+            if res["convergio"]:
+                st.success(res["justificacion"])
+            else:
+                st.warning(res["justificacion"])
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Raiz aproximada", f"{raiz:.12f}")
+            c2.metric("Iteraciones", f"{iters}")
+            try:
+                c3.metric("|f(raiz)|", f"{abs(f_fn(raiz)):.4e}")
+            except Exception:
+                c3.metric("|f(raiz)|", "N/A")
+
+            df_hist = pd.DataFrame(historial)
+            if not df_hist.empty:
+                st.markdown("### Tabla de iteraciones")
+                st.dataframe(df_hist, width="stretch", hide_index=True)
+
+                st.markdown("### Graficas")
+                col_g1, col_g2 = st.columns(2)
+                with col_g1:
+                    chart_x = (
+                        alt.Chart(df_hist).mark_line(point=True)
+                        .encode(x=alt.X("iter:Q", title="Iteracion"), y=alt.Y("x_{n+1}:Q", title="x"), tooltip=["iter", "x_n", "x_{n+1}", "error"])
+                        .properties(height=280)
+                    )
+                    st.altair_chart(chart_x, width="stretch")
+                with col_g2:
+                    chart_err = (
+                        alt.Chart(df_hist).mark_line(point=True, color="#d62728")
+                        .encode(x=alt.X("iter:Q", title="Iteracion"), y=alt.Y("error:Q", title="Error"), tooltip=["iter", "error"])
+                        .properties(height=280)
+                    )
+                    st.altair_chart(chart_err, width="stretch")
+
+                st.markdown("### Grafica de f(x)")
+                x_min = min(res["x0"], res["x1"], raiz) - 1.0
+                x_max = max(res["x0"], res["x1"], raiz) + 1.0
+                n_puntos = 250
+                paso = (x_max - x_min) / (n_puntos - 1)
+                datos = []
+                for idx in range(n_puntos):
+                    xv = x_min + idx * paso
+                    try:
+                        yv = f_fn(xv)
+                        if not isinstance(yv, complex) and math.isfinite(yv):
+                            datos.append({"x": xv, "fx": float(yv)})
+                    except Exception:
+                        pass
+                if datos:
+                    df_fx = pd.DataFrame(datos)
+                    curva = alt.Chart(df_fx).mark_line().encode(x="x:Q", y="fx:Q", tooltip=["x", "fx"]).properties(height=320)
+                    eje = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="gray").encode(y="y:Q")
+                    pt = alt.Chart(pd.DataFrame({"x": [raiz], "fx": [f_fn(raiz)]})).mark_point(color="red", size=100).encode(x="x:Q", y="fx:Q")
+                    st.altair_chart(curva + eje + pt, width="stretch")
+
+        except Exception as error:
+            st.error(f"Error: {error}")
+
 st.markdown("---")
-st.caption("Proximo paso: agregar Secante y Falsa Posicion.")
+st.caption("Proximo paso: agregar Falsa Posicion.")
