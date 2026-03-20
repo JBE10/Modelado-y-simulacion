@@ -107,6 +107,7 @@ TEMPLATE = """
           <select name="metodo" id="metodo">
             <option value="biseccion" {% if form.metodo == "biseccion" %}selected{% endif %}>Biseccion</option>
             <option value="punto_fijo" {% if form.metodo == "punto_fijo" %}selected{% endif %}>Punto Fijo</option>
+            <option value="newton" {% if form.metodo == "newton" %}selected{% endif %}>Newton-Raphson</option>
           </select>
         </div>
         <div>
@@ -123,12 +124,17 @@ TEMPLATE = """
         <div>
           <label>f(x)</label>
           <input name="expr_f" value="{{ form.expr_f }}" />
-          <div class="hint">Obligatoria en biseccion y en punto fijo.</div>
+          <div class="hint">Obligatoria en biseccion, punto fijo y newton.</div>
         </div>
-        <div>
+        <div id="bloque_g">
           <label>g(x) (solo punto fijo)</label>
           <input name="expr_g" value="{{ form.expr_g }}" />
           <div class="hint">En punto fijo se itera <code>x(n+1)=g(x(n))</code>. Si lo dejas vacio, se usa <code>g(x)=x-f(x)</code>.</div>
+        </div>
+        <div id="bloque_df">
+          <label>f'(x) (solo newton)</label>
+          <input name="expr_df" value="{{ form.expr_df }}" />
+          <div class="hint">Si la dejas vacia, se aproxima derivada numerica centrada.</div>
         </div>
       </div>
 
@@ -175,6 +181,9 @@ TEMPLATE = """
       </p>
       {% if result.g_auto %}
       <p class="note"><strong>g(x) generada automaticamente:</strong> <code>{{ result.g_auto }}</code></p>
+      {% endif %}
+      {% if result.derivada_numerica %}
+      <p class="note"><strong>Newton:</strong> f'(x) estimada numericamente por diferencia centrada.</p>
       {% endif %}
       {% if result.justificacion %}
       <p class="note"><strong>Justificacion:</strong> {{ result.justificacion }}</p>
@@ -223,12 +232,23 @@ TEMPLATE = """
     const metodo = document.getElementById("metodo").value;
     const ab = document.getElementById("bloque_ab");
     const x0 = document.getElementById("bloque_x0");
+    const g = document.getElementById("bloque_g");
+    const df = document.getElementById("bloque_df");
     if (metodo === "biseccion") {
       ab.style.display = "block";
       x0.style.display = "none";
+      g.style.display = "none";
+      df.style.display = "none";
+    } else if (metodo === "punto_fijo") {
+      ab.style.display = "none";
+      x0.style.display = "block";
+      g.style.display = "block";
+      df.style.display = "none";
     } else {
       ab.style.display = "none";
       x0.style.display = "block";
+      g.style.display = "none";
+      df.style.display = "block";
     }
   }
   document.getElementById("metodo").addEventListener("change", refreshInputs);
@@ -456,12 +476,108 @@ def punto_fijo_python(expr_f, expr_g, x0, tol, max_iter):
     }
 
 
+def derivada_numerica(f, x):
+    h = 1e-6 * (1.0 + abs(x))
+    return (f(x + h) - f(x - h)) / (2.0 * h)
+
+
+def newton_python(expr_f, x0, tol, max_iter, expr_df=None):
+    f = build_function(expr_f)
+    df = build_function(expr_df) if expr_df and expr_df.strip() else None
+    usa_df_numerica = df is None
+    historial = []
+    xn = float(x0)
+
+    for i in range(1, max_iter + 1):
+        try:
+            fx = float(f(xn))
+        except Exception as e:
+            return {
+                "metodo": "newton",
+                "raiz": xn,
+                "iteraciones": i - 1,
+                "residuo": abs(historial[-1]["f(x_n)"]) if historial else float("nan"),
+                "convergio": False,
+                "justificacion": f"Se detuvo en iter {i}: no se pudo evaluar f(x_n): {e}",
+                "historial": historial,
+                "derivada_numerica": usa_df_numerica,
+            }
+
+        if not math.isfinite(fx):
+            return {
+                "metodo": "newton",
+                "raiz": xn,
+                "iteraciones": i - 1,
+                "residuo": abs(historial[-1]["f(x_n)"]) if historial else float("nan"),
+                "convergio": False,
+                "justificacion": f"Se detuvo en iter {i}: f(x_n) dio NaN/Inf.",
+                "historial": historial,
+                "derivada_numerica": usa_df_numerica,
+            }
+
+        try:
+            dfx = float(derivada_numerica(f, xn) if usa_df_numerica else df(xn))
+        except Exception as e:
+            return {
+                "metodo": "newton",
+                "raiz": xn,
+                "iteraciones": i - 1,
+                "residuo": abs(fx),
+                "convergio": False,
+                "justificacion": f"Se detuvo en iter {i}: no se pudo evaluar f'(x_n): {e}",
+                "historial": historial,
+                "derivada_numerica": usa_df_numerica,
+            }
+
+        if not math.isfinite(dfx) or abs(dfx) < 1e-14:
+            return {
+                "metodo": "newton",
+                "raiz": xn,
+                "iteraciones": i - 1,
+                "residuo": abs(fx),
+                "convergio": False,
+                "justificacion": f"Se detuvo en iter {i}: f'(x_n) no es usable (NaN/Inf o casi 0).",
+                "historial": historial,
+                "derivada_numerica": usa_df_numerica,
+            }
+
+        x_next = xn - fx / dfx
+        error = abs(x_next - xn)
+        historial.append({"iter": i, "x_n": xn, "f(x_n)": fx, "f'(x_n)": dfx, "x_n+1": x_next, "error": error})
+
+        if error < tol or abs(fx) < tol:
+            return {
+                "metodo": "newton",
+                "raiz": x_next,
+                "iteraciones": i,
+                "residuo": abs(float(f(x_next))),
+                "convergio": True,
+                "justificacion": f"Convergio en iter {i}: se cumplio |x_n+1 - x_n| < tol o |f(x_n)| < tol.",
+                "historial": historial,
+                "derivada_numerica": usa_df_numerica,
+            }
+
+        xn = x_next
+
+    return {
+        "metodo": "newton",
+        "raiz": xn,
+        "iteraciones": max_iter,
+        "residuo": abs(float(f(xn))),
+        "convergio": False,
+        "justificacion": "No convergio: se alcanzo max_iter. Revisa x0 o la derivada usada.",
+        "historial": historial,
+        "derivada_numerica": usa_df_numerica,
+    }
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     form = {
         "metodo": "biseccion",
         "expr_f": "x^3 - x - 2",
         "expr_g": "cbrt(x + 2)",
+        "expr_df": "3*x^2 - 1",
         "a": "1",
         "b": "2",
         "x0": "1.5",
@@ -482,6 +598,7 @@ def index():
             form.update({k: request.form.get(k, form.get(k, "")) for k in form})
             form["expr_f"] = normalize_expr(form["expr_f"])
             form["expr_g"] = normalize_expr(form["expr_g"])
+            form["expr_df"] = normalize_expr(form["expr_df"])
 
             metodo = form["metodo"]
             tol = parse_float("tol", form["tol"])
@@ -496,7 +613,7 @@ def index():
                     a = parse_float("a", form["a"])
                     b = parse_float("b", form["b"])
                     result = biseccion_python(form["expr_f"], a, b, tol, max_iter)
-            else:
+            elif metodo == "punto_fijo":
                 if not form["expr_f"]:
                     error = "Para punto fijo debes ingresar al menos f(x)."
                 else:
@@ -510,6 +627,12 @@ def index():
                     result = punto_fijo_python(form["expr_f"], expr_g_used, x0, tol, max_iter)
                     if g_auto:
                         result["g_auto"] = expr_g_used
+            else:
+                if not form["expr_f"]:
+                    error = "Para Newton debes ingresar f(x)."
+                else:
+                    x0 = parse_float("x0", form["x0"])
+                    result = newton_python(form["expr_f"], x0, tol, max_iter, form["expr_df"])
 
             if result is not None:
                 labels = [row["iter"] for row in result["historial"]]
@@ -518,9 +641,14 @@ def index():
                     columns = ["iter", "a", "b", "c", "fc", "error"]
                     serie_valor = [row["c"] for row in result["historial"]]
                     label_valor = "c"
-                else:
+                elif metodo == "punto_fijo":
                     columns = ["iter", "x_n", "x_next", "error", "residual"]
                     serie_valor = [row["x_next"] for row in result["historial"]]
+                    label_valor = "x_n+1"
+                    residuo_label = "|f(raiz)|"
+                else:
+                    columns = ["iter", "x_n", "f(x_n)", "f'(x_n)", "x_n+1", "error"]
+                    serie_valor = [row["x_n+1"] for row in result["historial"]]
                     label_valor = "x_n+1"
                     residuo_label = "|f(raiz)|"
         except Exception as e:
