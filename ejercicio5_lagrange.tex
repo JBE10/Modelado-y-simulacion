@@ -1,0 +1,119 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{parskip}
+
+\geometry{margin=2.5cm}
+
+\title{\textbf{Modelado y Simulaci\'on}\\[0.5em]
+       \large Tema 03 --- Interpolaci\'on de Lagrange}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+% ─────────────────────────────────────────────────────────────
+\section*{Ejercicio 5}
+
+Hallar el polinomio interpolante de Lagrange para:
+\[
+  x = [0,\;1,\;2], \qquad y = [1,\;3,\;0]
+\]
+
+% ─────────────────────────────────────────────────────────────
+\section*{Resoluci\'on}
+
+Tenemos $n+1 = 3$ puntos, por lo que el polinomio interpolante
+tiene grado $\leq 2$:
+\[
+  (x_0,\,y_0)=(0,1),\quad
+  (x_1,\,y_1)=(1,3),\quad
+  (x_2,\,y_2)=(2,0).
+\]
+
+\subsection*{Paso 1 \;---\; Polinomios base de Lagrange}
+
+La f\'ormula general de cada polinomio base es:
+\[
+  L_i(x) = \prod_{\substack{j=0\\j\neq i}}^{n}
+            \frac{x - x_j}{x_i - x_j}
+\]
+
+\textbf{$L_0(x)$} \;(ra\'ices en $x_1=1$ y $x_2=2$):
+\[
+  L_0(x)
+    = \frac{(x-1)(x-2)}{(0-1)(0-2)}
+    = \frac{(x-1)(x-2)}{(-1)(-2)}
+    = \frac{(x-1)(x-2)}{2}
+\]
+
+\textbf{$L_1(x)$} \;(ra\'ices en $x_0=0$ y $x_2=2$):
+\[
+  L_1(x)
+    = \frac{(x-0)(x-2)}{(1-0)(1-2)}
+    = \frac{x(x-2)}{(1)(-1)}
+    = -x(x-2)
+\]
+
+\textbf{$L_2(x)$} \;(ra\'ices en $x_0=0$ y $x_1=1$):
+\[
+  L_2(x)
+    = \frac{(x-0)(x-1)}{(2-0)(2-1)}
+    = \frac{x(x-1)}{(2)(1)}
+    = \frac{x(x-1)}{2}
+\]
+
+\subsection*{Paso 2 \;---\; Construcci\'on de $P(x)$}
+
+\[
+  P(x) = \sum_{i=0}^{2} y_i\, L_i(x)
+       = 1\cdot L_0(x) + 3\cdot L_1(x) + 0\cdot L_2(x)
+\]
+
+Como $y_2 = 0$, el tercer t\'ermino desaparece:
+\[
+  P(x)
+    = 1\cdot\frac{(x-1)(x-2)}{2}
+    + 3\cdot\bigl[-x(x-2)\bigr]
+\]
+
+\subsection*{Paso 3 \;---\; Expansi\'on y simplificaci\'on}
+
+Expandiendo cada factor:
+\[
+  (x-1)(x-2) = x^2 - 3x + 2
+\]
+\[
+  P(x)
+    = \frac{x^2 - 3x + 2}{2} - 3x^2 + 6x
+    = \frac{x^2 - 3x + 2 - 6x^2 + 12x}{2}
+    = \frac{-5x^2 + 9x + 2}{2}
+\]
+
+\[
+  \boxed{P(x) = -\frac{5}{2}\,x^2 + \frac{9}{2}\,x + 1}
+\]
+
+\subsection*{Paso 4 \;---\; Verificaci\'on}
+
+\begin{center}
+\begin{tabular}{cccc}
+  \toprule
+  $x_i$ & $P(x_i)$ & $y_i$ & \textcolor{green!50!black}{OK} \\
+  \midrule
+  $0$ & $-\dfrac{5}{2}(0)^2 + \dfrac{9}{2}(0) + 1 = 1$   & $1$ & \checkmark \\[8pt]
+  $1$ & $-\dfrac{5}{2}(1)^2 + \dfrac{9}{2}(1) + 1 = 3$   & $3$ & \checkmark \\[8pt]
+  $2$ & $-\dfrac{5}{2}(4) + \dfrac{9}{2}(2) + 1 = 0$     & $0$ & \checkmark \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+El polinomio pasa exactamente por los tres puntos dados. \qed
+
+\end{document}
