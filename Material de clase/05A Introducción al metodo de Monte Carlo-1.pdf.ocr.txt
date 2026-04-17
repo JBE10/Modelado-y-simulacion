@@ -1,0 +1,358 @@
+--- Page 1 ---
+DEL CAOS AL CÁLCULO: LA LÓGICA
+CONTRAINTUITIVA DEL AZAR
+Una introducción visual al método de Montecarlo
+Basado en la Clase 5: Modelado y Simulación | Ing. Omar Cáceres
+£ NotebookLM
+
+--- Page 2 ---
+SI EL AZAR ES IMPREDECIBLE,
+¿CÓMO PUEDE DARNOS
+RESPUESTAS EXACTAS?
+El método de Montecarlo es una técnica
+matemática que responde a esta pregunta.
+Utiliza el muestreo aleatorio y la
+probabilidad para aproximar soluciones
+numéricas a problemas que son demasiado
+complejos para resolverse de forma analítica.
+"Su nombre proviene del famoso casino de
+Monte Carlo, debido al enorme papel del
+azar en este método."
+/ f(x) dx
+f NotebookLM
+
+--- Page 3 ---
+LANZANDO DARDOS AL
+AZAR PARA ENCONTRAR A n
+El ejemplo clásico del método de
+Montecarlo
+1. El Tablero: Dibujamos un cuadrado
+de lado 2. Su área es 4.
+2. El Objetivo: Inscribimos un círculo
+perfecto de radio 1. Su área es ur?,
+es decir, n.
+3. El Juego: Generamos miles de
+puntos (o 'dardos') de forma
+completamente aleatoria dentro del
+cuadrado.
+(-1,1)
+(-1,-1)
+1=1
+(0,0)
+(1,1)
+(1,-1)
+
+--- Page 4 ---
+VIENDO CÓMO LA PROBABILIDAD REVELA LA PROPORCIÓN
+n = 100 puntos
+n = 10,000 puntos
+2
+2
+0
+-1
+-1
+-2
+-2
+-2
+-1
+1
+2
+-2
+-1
+2
+Puntos Dentro: 78, Total: 100
+Puntos Dentro: 7,855, Total: 10,000
+A medida que aumenta el número de puntos, la proporción de puntos que caen dentro del círculo
+se acerca cada vez más a la proporción entre el área del círculo y el área del cuadrado.
+(Puntos dentro)
+(Área del círculo)
+Puntos totales)
+(Área del cuadrado)
+£ NotebookLM
+
+--- Page 5 ---
+DE LA PROPORCIÓN GEOMÉTRICA A LA ESTIMACIÓN DE N
+Paso 1: Relación de Áreas
+Área Círculo
+Área Cuadrado
+7 * p2
+(Lado)2
+T*12
+22
+4
+Paso 2: Igualación por Probabilidad
+Puntos dentro del círculo
+-~
+Total de puntos generados
+Paso 3: La Estimación Final
+T~4*
+Puntos dentro del círculo
+Total de puntos
+£ NotebookLM
+
+--- Page 6 ---
+EL BLUEPRINT EN ACCIÓN: IMPLEMENTACIÓN EN PYTHON
+import random
+# Número de puntos aleatorios a generar
+num_puntos = 1000000
+puntos_dentro = 0
+# Generamos los puntos aleatorios
+for _ in range(num_puntos):
+x = random. uniform(-1, 1)
+y = random. unitorm(-1, 1)
+# Coordenada y aleatoria en 1-l, 11
+# ¿El punto cayó dentro del círculo unitario? (Distancia al centro ‹= 1)
+if x**2 + y**2 <= 1: 4
+puntos_dentro += 1
+La condición clave:
+verifica si el 'dardo'
+aterrizó dentro del
+círculo.
+# Estimación de pi usando la relación de áreas
+pi_estimado = (puntos_dentro / num_puntos) * 4
+La fórmula final,
+convertida en código.
+print(f"Estimación de ni con {num_puntos} puntos: {pi_estimado}")
+Resultado de Ejemplo:
+Estimación de n con 1000000 puntos: 3.141592...
+£ NotebookLM
+
+--- Page 7 ---
+DECONSTRUYENDO LA MAGIA: EL PROCESO MONTECARLO
+EN CUATRO PASOS
+El método que usamos para estimar t sigue un procedimiento básico aplicable a una gran variedad de problemas.
+1
+2
+3
+4
+Definir el Dominio
+Identificar el problema y el espacio de posibles soluciones.
+(Ej: El cuadrado de lado 2)
+Generar Muestras Aleatorias
+Crear un gran número de entradas aleatorias dentro de ese dominio.
+(Ej: Los puntos (x, y))
+Evaluar y Contar
+Aplicar una condición a cada muestra para determinar si es un 'éxito'.
+(Ej: ¿x-+y= <= 1?)
+Calcular la Estimación
+Usar la proporción de 'éxitos' para aproximar la solución final.
+(Ej: Calcular n con la fórmula)
+£ NotebookLM
+
+--- Page 8 ---
+LA GARANTÍA MATEMÁTICA: LA LEY
+DE LOS GRANDES NÚMEROS (LGN)
+Concepto Central
+La LGN establece que, a medida que el número
+de ensayos essayos ('n') en un experimento
+aleatorio aumenta, el promedio de los
+resultados de esas muestras se acerca cada vez
+más al valor esperado teórico.
+En Términos de Montecarlo
+Con suficientes "dardos", nuestra estimación
+aleatoria converge inevitablemente al valor real.
+1
+lim
+noo n
+f (xi) = E[f (x)]
+i=1
+*(El promedio muestral converge al valor esperado)*
+Valor Estimado
+Valor Verdadero
+10
+100
+1000
+10000
+Número de Muestras (n)
+100000
+1000000
+£ NotebookLM
+
+--- Page 9 ---
+MÁS ALLÁ DE T: USANDO EL AZAR PARA
+CALCULAR INTEGRALES
+El Problema
+Calcular el área bajo una curva (una integral definida) puede ser analíticamente imposible
+para funciones complejas.
+La Solución Montecarlo
+Podemos reformular la integral como el 'valor esperado' de la función en un intervalo. La
+LGN nos garantiza que podemos estimar este valor esperado simplemente promediando la
+función evaluada en puntos aleatorios.
+Fundamento Matemático
+1 = Jab
+f(x)dx
+Podemos expresar la integral como:
+I = Volumen * E[f(x)]
+Donde 'Volumen' para una integral 1D es simplemente la longitud del intervalo, (b-a).
+£ NotebookLM
+
+--- Page 10 ---
+FORMALIZANDO LA INTEGRACIÓN POR MONTECARLO
+Estimación para una Integral de 1D
+Para calcular fa,b f (x) dx, generamos n puntos
+x; uniformemente en el intervalo [a, b].
+La Fórmula de Estimación (Î)
+1
+I = (b-a) •
+-
+n
+El "volumen" o
+longitud del dominio.
+El valor promedio de
+• la función en las
+muestras aleatorias.
+Extensión a Integrales Múltiples (2D)
+f (x)
+n
+i=1
+a
+X1
+X2 X3 ..
+El área del rectángulo
+contenedor.
+£ NotebookLM
+
+--- Page 11 ---
+Midiendo la Precisión: El Intervalo de Confianza
+Dado que Montecarlo es una estimación, no nos da una respuesta única, sino un rango
+de valores probables. El intervalo de confianza (IC) nos dice con cierto nivel de certeza
+(ej. 95%) que el valor verdadero se encuentra dentro de ese rango.
+IC =Î ‡ za/2
+n
+n
+vn
+Î: Nuestra integral estimada (el promedio).
+2 (a/2: Un valor crítico basado en el nivel de confianza deseado (ej. 1.96 para 95%).
+o: La desviación estándar de las muestras f (xi).
+n: El número total de muestras.
+: Se conoce como el Error Estándar (EE).
+vn
+£ NotebooklM
+
+--- Page 12 ---
+REFERENCIA TÉCNICA: COMPONENTES DEL INTERVALO
+Desviación Estándar de la Muestra (ơ)
+Mide la dispersión de los valores de f(x_i).
+0=
+(f (Xi) - x) 2
+Error Estándar (EE)
+Mide la precisión de la media estimada.
+Disminuye a medida que n aumenta.
+EE
+Valores Críticos (z_(a/2))
+Nivel de Confianza (IC)
+90%
+95%
+99%
+Valor z
+1.645
+1.960
+2.576
+n
+Conclusión Clave: Para aumentar la precisión (reducir el ancho del IC), la forma más directa es
+aumentar n, el número de simulaciones.
+A NotebookLM
+
+--- Page 13 ---
+EL MOTOR DEL MÉTODO: GENERACIÓN DE NÚMEROS ALEATORIOS
+El Requisito
+El método de Montecarlo depende de la capacidad de
+generar números con una distribución uniforme (es
+decir, cada número en un intervalo tiene la misma
+probabilidad de ser elegido).
+Ejemplo de Código
+import random
+# Generar 5 números aleatorios uniformes en el rango [0, 1]
+print(" Ejecución 1:")
+for
+in range(5):
+print(random. uniform(0, 1))
+print("\nEjecución 2:")
+for
+in range(5):
+print(random.uniform(0, 1))
+Resultado de Ejemplo
+Ejecución 1:
+0.5415297812...
+0.0852825975...
+0.9784646267...
+0.6283191030...
+0.6194501801..
+Ejecución 2:
+0.1531436422...
+0.0006898010...
+0.3174500651...
+0.3762803645...
+0.4838379873..
+La Herramienta en Python
+La función random.uniform(a, b) es ideal para esto.
+Ai NotebookLM
+
+--- Page 14 ---
+AZAR CONTROLADO: LA IMPORTANCIA DE LA SEMILLA (SEED)
+El Problema
+Si los resultados son diferentes cada vez, ¿cómo podemos depurar nuestro código o verificar los resultados de otros?
+La Solución
+Usar una "semilla" ('seed"). Al fijar la semilla, el generador de números aleatorios producirá siempre la misma secuencia de
+números, haciendo el experimento 100% reproducible.
+Ejemplo de Código
+import random
+random.seed(42) # Se establece la semilla
+print("Ejecución 1:")
+for -
+in range(5):
+print (random. uniform(0, 1))
+random. seed(42) # Se restablece la misma semilla
+print("\nEjecución 2:")
+for -
+in range(5):
+print( random.uniform(0, 1))
+Resultado de Ejemplo
+Ejecución 1:
+0.6394267984...
+0.0250107552...
+0.2750293183...
+0.2232107381...
+0.7364712141...
+Ejecución 2:
+0.6394267984..
+0.0250107552...
+0.2750293183...
+0.2232107381...
+0.7364712141...
+£ NotebooklM
+
+--- Page 15 ---
+DEL CAOS AL CÁLCULO: EL MÉTODO
+MONTECARLO EN RESUMEN
+Aplicación Típica: Cálculo de Áreas
+Características Principales
+• Basado en Simulación: Estima resultados a
+través de miles o millones de repeticiones
+aleatorias.
+• Poder para lo Complejo: Es ideal cuando un
+problema es demasiado difícil de resolver
+con fórmulas exactas (analíticamente).
+• Amplia Aplicabilidad: Se utiliza en física,
+finanzas, ingeniería, inteligencia artificial y
+más.
+Característica
+Muestreo
+Dominio
+Cálculo
+Área/Volumen
+Montecarlo
+Típico (1D)
+Puntos X; en 1D
+Intervalo la, bl
+Promedio de
+f (xi)
+Longitud (6 - a)
+Montecarlo para Área
+bajo Curva (2D)
+Puntos (Xi, Yi) en 2D
+Rectángulo contenedor
+Proporción de puntos
+bajo f(x)
+Área del rectángulo
+£ NotebookLM

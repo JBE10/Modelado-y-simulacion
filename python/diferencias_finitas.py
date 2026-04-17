@@ -3,6 +3,9 @@ Diferenciación Numérica — Diferencias Finitas Centradas
 ========================================================
 Tema 03A/03B — Modelado y Simulación
 
+Incluye interpolación de Newton: diferencias progresivas (h constante) y
+diferencias divididas (nodos arbitrarios), con LaTeX del polinomio en potencias de x.
+
 Fórmulas:
     1ra derivada centrada:  f'(x_i)  ≈ [f(x_{i+1}) - f(x_{i-1})] / (2h)
     2da derivada centrada:  f''(x_i) ≈ [f(x_{i+1}) - 2f(x_i) + f(x_{i-1})] / h²
@@ -16,7 +19,319 @@ Fórmulas:
         f''(x_i) ≈ [f(x_i) - 2f(x_{i-1}) + f(x_{i-2})] / h²
 """
 
+import math
+from fractions import Fraction
 from typing import Optional
+
+
+# ───────────────────────────────────────────────────────────────
+# Interpolación Newton — diferencias finitas progresivas (h cte.)
+# ───────────────────────────────────────────────────────────────
+
+def _poly_trim(p: list[float], eps: float = 1e-12) -> list[float]:
+    out = list(p)
+    while len(out) > 1 and abs(out[-1]) < eps:
+        out.pop()
+    return out
+
+
+def _poly_add(a: list[float], b: list[float]) -> list[float]:
+    n = max(len(a), len(b))
+    out = []
+    for i in range(n):
+        va = a[i] if i < len(a) else 0.0
+        vb = b[i] if i < len(b) else 0.0
+        out.append(va + vb)
+    return _poly_trim(out)
+
+
+def _poly_scale(p: list[float], s: float) -> list[float]:
+    return _poly_trim([c * s for c in p])
+
+
+def _poly_mul_x_minus_r(p: list[float], r: float) -> list[float]:
+    """Multiplica p(x) por (x - r); coeficientes en base 1, x, x², …"""
+    out = [0.0] * (len(p) + 1)
+    for i, c in enumerate(p):
+        out[i + 1] += c
+        out[i] -= c * r
+    return _poly_trim(out)
+
+
+def _float_a_latex_coef(c: float, eps: float = 1e-10) -> str:
+    """Un coeficiente positivo (valor absoluto) o con signo para término independiente."""
+    if abs(c) < eps:
+        return "0"
+    fr = Fraction(c).limit_denominator(1_000_000)
+    if abs(float(fr) - c) < 1e-8:
+        num, den = fr.numerator, fr.denominator
+        if den == 1:
+            return str(num)
+        if num < 0:
+            return f"-\\frac{{{abs(num)}}}{{{den}}}"
+        return f"\\frac{{{num}}}{{{den}}}"
+    s = f"{c:.12g}"
+    return s.replace("-", "\\text{-}") if s.startswith("-") else s
+
+
+def polinomio_potencias_a_latex(coefs: list[float], var: str = "x", eps: float = 1e-9) -> str:
+    """
+    coefs[i] multiplica var^i. Devuelve fragmento LaTeX (sin delimitadores $$).
+    Orden decreciente de grado, como en álgebra.
+    """
+    terms: list[str] = []
+    for i in range(len(coefs) - 1, -1, -1):
+        c = coefs[i]
+        if abs(c) < eps:
+            continue
+        if i == 0:
+            if not terms:
+                terms.append(_float_a_latex_coef(c, eps))
+            elif c >= 0:
+                terms.append(" + " + _float_a_latex_coef(c, eps))
+            else:
+                terms.append(" - " + _float_a_latex_coef(abs(c), eps))
+            continue
+        mag = abs(c)
+        coef_tex = _float_a_latex_coef(mag, eps)
+        if i == 1:
+            if abs(mag - 1.0) < eps:
+                xp = var
+            else:
+                xp = f"{coef_tex}\\,{var}"
+        else:
+            if abs(mag - 1.0) < eps:
+                xp = f"{var}^{{{i}}}"
+            else:
+                xp = f"{coef_tex}\\,{var}^{{{i}}}"
+        if c < 0:
+            terms.append(" - " + xp if terms else "-" + xp)
+        else:
+            terms.append(" + " + xp if terms else xp)
+    if not terms:
+        return "0"
+    return "".join(terms)
+
+
+def interpolacion_newton_diferencias(
+    xs: list[float],
+    ys: list[float],
+    tol_h: float = 1e-7,
+) -> dict:
+    """
+    Polinomio interpolante por Newton (diferencias progresivas).
+    Requiere abscisas equiespaciadas: x_i = x_0 + i h.
+
+    Retorna
+    -------
+    dict con x0, h, triangulo (filas), deltas (Δ^k y_0), coefs (base 1,x,x²,…),
+    latex_p (expandido), latex_newton (forma en s=(x-x0)/h).
+    """
+    n = len(xs)
+    if n != len(ys):
+        raise ValueError("xs e ys deben tener la misma longitud.")
+    if n < 1:
+        raise ValueError("Se necesita al menos un punto.")
+
+    x0 = xs[0]
+    if n == 1:
+        h = 1.0
+        diff = [[float(ys[0])]]
+    else:
+        h = xs[1] - xs[0]
+        if abs(h) < 1e-15:
+            raise ValueError("El paso h entre nodos no puede ser cero.")
+        for i in range(n - 1):
+            hi = xs[i + 1] - xs[i]
+            if abs(hi - h) > tol_h * max(1.0, abs(h)):
+                raise ValueError(
+                    "Los nodos x deben ser equiespaciados (mismo h en todo el intervalo)."
+                )
+        diff = []
+        row = [float(v) for v in ys]
+        diff.append(row)
+        for _ in range(n - 1):
+            prev = diff[-1]
+            row = [prev[j + 1] - prev[j] for j in range(len(prev) - 1)]
+            diff.append(row)
+
+    deltas = [diff[k][0] for k in range(len(diff))]
+
+    total = [0.0]
+    prod = [1.0]
+    for k in range(len(deltas)):
+        d0 = deltas[k]
+        coef = d0 / math.factorial(k) / (h ** k)
+        if k == 0:
+            term = [coef]
+        else:
+            prod = _poly_mul_x_minus_r(prod, x0 + (k - 1) * h)
+            term = _poly_scale(prod, coef)
+        total = _poly_add(total, term)
+
+    coefs = total
+    latex_expandido = polinomio_potencias_a_latex(coefs)
+
+    # Forma Newton: y_0 + (Δy_0/1!) s + (Δ²y_0/2!) s(s-1) + … ,  s = (x-x_0)/h
+    newton_terms: list[str] = []
+    primero = True
+    for k in range(len(deltas)):
+        d0 = deltas[k]
+        if abs(d0) < 1e-14 and k > 0:
+            continue
+        raw = d0 / math.factorial(k)
+        if k == 0:
+            newton_terms.append(_float_a_latex_coef(raw, 1e-10))
+            primero = False
+            continue
+        mag = abs(raw)
+        if k == 1:
+            inner = "s" if abs(mag - 1.0) < 1e-9 else f"{_float_a_latex_coef(mag, 1e-10)}\\,s"
+        else:
+            sf = "s" + "".join(f"(s-{j})" for j in range(1, k))
+            inner = sf if abs(mag - 1.0) < 1e-9 else f"{_float_a_latex_coef(mag, 1e-10)}\\,{sf}"
+        if raw < 0:
+            newton_terms.append((" - " if not primero else "-") + inner)
+        else:
+            newton_terms.append((" + " if not primero else "") + inner)
+        primero = False
+    latex_newton = "".join(newton_terms)
+
+    # Tabla legible para DataFrame: columnas x, y, Δ^1, Δ^2, ...
+    filas_tri = []
+    for i in range(n):
+        fila: dict = {"x": xs[i], "y": ys[i]}
+        for k in range(1, n):
+            if i < n - k:
+                fila[f"Δ^{k}"] = diff[k][i]
+            else:
+                fila[f"Δ^{k}"] = None
+        filas_tri.append(fila)
+
+    return {
+        "x0": x0,
+        "h": h,
+        "triangulo_diff": diff,
+        "filas_tabla": filas_tri,
+        "deltas_y0": deltas,
+        "coefs_potencias": coefs,
+        "latex_polinomio": latex_expandido,
+        "latex_newton_s": latex_newton,
+        "grado": len(coefs) - 1,
+        "modo": "progresivas",
+    }
+
+
+def interpolacion_newton_divididas(xs: list[float], ys: list[float]) -> dict:
+    """
+    Polinomio interpolante por Newton con diferencias divididas (nodos x distintos,
+    espaciado arbitrario). Grado ≤ n con n+1 puntos.
+
+    P(x) = f[x₀] + f[x₀,x₁](x-x₀) + f[x₀,x₁,x₂](x-x₀)(x-x₁) + …
+    """
+    n1 = len(xs)
+    if n1 != len(ys):
+        raise ValueError("xs e ys deben tener la misma longitud.")
+    if n1 < 1:
+        raise ValueError("Se necesita al menos un punto.")
+    xs_f = [float(x) for x in xs]
+    ys_f = [float(y) for y in ys]
+    for i in range(n1 - 1):
+        if abs(xs_f[i + 1] - xs_f[i]) < 1e-14:
+            raise ValueError("Hay abscisas repetidas o demasiado cercanas; se requieren x distintos.")
+
+    n = n1 - 1
+    DD: list[list[float]] = [list(ys_f)]
+    for k in range(1, n1):
+        prev = DD[k - 1]
+        row = []
+        for j in range(n1 - k):
+            num = prev[j + 1] - prev[j]
+            den = xs_f[j + k] - xs_f[j]
+            if abs(den) < 1e-15:
+                raise ValueError("Abscisas mal condicionadas (denominador cero en divididas).")
+            row.append(num / den)
+        DD.append(row)
+
+    aks = [DD[k][0] for k in range(n1)]
+
+    total = [0.0]
+    prod = [1.0]
+    for k in range(n1):
+        ak = aks[k]
+        if k == 0:
+            term = [ak]
+        else:
+            prod = _poly_mul_x_minus_r(prod, xs_f[k - 1])
+            term = _poly_scale(prod, ak)
+        total = _poly_add(total, term)
+
+    coefs = total
+    latex_expandido = polinomio_potencias_a_latex(coefs)
+
+    # Forma Newton en factores (x-x_i) con coeficientes numéricos
+    def x_shift_latex(xi: float) -> str:
+        if abs(xi) < 1e-10:
+            return "x"
+        tx = _float_a_latex_coef(abs(xi), 1e-9)
+        if xi > 0:
+            return f"\\bigl(x - {tx}\\bigr)"
+        return f"\\bigl(x + {tx}\\bigr)"
+
+    newton_terms: list[str] = []
+    primero = True
+    for k in range(n1):
+        ak = aks[k]
+        if abs(ak) < 1e-14 and k > 0:
+            continue
+        if k == 0:
+            newton_terms.append(_float_a_latex_coef(ak, 1e-10))
+            primero = False
+            continue
+        factor = "".join(x_shift_latex(xs_f[j]) for j in range(k))
+        mag = abs(ak)
+        if abs(mag - 1.0) < 1e-9:
+            piece = factor
+        else:
+            piece = f"{_float_a_latex_coef(mag, 1e-10)}\\,{factor}"
+        if ak < 0:
+            newton_terms.append((" - " if not primero else "-") + piece)
+        else:
+            newton_terms.append((" + " if not primero else "") + piece)
+        primero = False
+    latex_newton_factores = "".join(newton_terms)
+
+    filas_tri = []
+    for i in range(n1):
+        fila: dict = {"x": xs_f[i], "y": ys_f[i]}
+        for k in range(1, n1):
+            key = f"div_{k}"
+            if i < n1 - k:
+                fila[key] = DD[k][i]
+            else:
+                fila[key] = None
+        filas_tri.append(fila)
+
+    # ¿equiespaciados? (solo informativo)
+    h0 = xs_f[1] - xs_f[0] if n1 > 1 else 1.0
+    equi = n1 <= 1 or all(
+        abs((xs_f[i + 1] - xs_f[i]) - h0) < 1e-7 * max(1.0, abs(h0)) for i in range(n1 - 1)
+    )
+
+    return {
+        "x0": xs_f[0],
+        "h": xs_f[1] - xs_f[0] if n1 > 1 else 1.0,
+        "triangulo_diff": DD,
+        "filas_tabla": filas_tri,
+        "deltas_y0": aks,
+        "coefs_potencias": coefs,
+        "latex_polinomio": latex_expandido,
+        "latex_newton_divididas": latex_newton_factores,
+        "latex_newton_s": "",
+        "grado": len(coefs) - 1,
+        "modo": "divididas",
+        "nodos_equiespaciados": equi,
+    }
 
 
 # ───────────────────────────────────────────────────────────────
@@ -91,8 +406,9 @@ def diferencias_finitas_tabla(xs: list[float], ys: list[float]) -> dict:
             # Centrada ⭐
             h_fwd = xs[i + 1] - xs[i]
             h_bwd = xs[i] - xs[i - 1]
-            h_avg = (h_fwd + h_bwd) / 2.0
-            d2 = (ys[i + 1] - 2 * ys[i] + ys[i - 1]) / (h_avg ** 2)
+            d1_fwd = (ys[i + 1] - ys[i]) / h_fwd
+            d1_bwd = (ys[i] - ys[i - 1]) / h_bwd
+            d2 = 2.0 * (d1_fwd - d1_bwd) / (h_fwd + h_bwd)
             tipo_d2 = "Centrada"
 
         fila["f''(x_i)"] = d2

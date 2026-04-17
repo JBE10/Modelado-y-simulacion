@@ -1,0 +1,279 @@
+--- Page 1 ---
+El Arte de la Aproximación
+Una Guía Visual a las Reglas de Integración de Newton-Cotes
+Modelado y Simulación | Clase 4
+Ing. Omar Cáceres
+£ NotebookLM
+
+--- Page 2 ---
+El Desafío: ¿Cómo calculamos el área bajo una curva compleja?
+2 + cOs (1 + x3/2)
+-e0.5х dx
+V1 + 0.5 sin x
+Algunas funciones son
+difíciles o imposibles de
+integrar de forma analítica.
+No existe una solución
+exacta simple.
+0.25
+0.75
+1.25
+1.75
+f(x)
+2.599
+2.414
+1.945
+1.993
+Entonces, ¿cómo encontramos el valor de su integral definida?
+£ NotebooklM
+
+--- Page 3 ---
+La Estrategia Fundamental: Aproximar para Integrar
+Las reglas de Newton-Cotes se basan en una idea clave: si no podemos integrar la
+función original, la sustituimos por un polinomio más simple (una recta, una parábola)
+que sea fácil de integrar.
+N-N-AM
+a
+Función Continua
+Puntos Discretos
+Aproximación Polinomial
+£ NotebookLM
+
+--- Page 4 ---
+Aproximación Lineal: La Regla del Trapecio
+La forma más simple de mejorar la aproximación es conectar dos puntos de la función con una
+línea recta, formando un trapecio. Esto utiliza un polinomio de interpolación de grado 1.
+f(x) A
+f(b)
+f(a)
+**Fórmula Simple (1 Segmento)**
+Ja 5(2) da =
+b - a
+[f (a) + f(b)]
+El área se calcula como el promedio de las
+alturas por el ancho del intervalo.
+a
+£ NotebookLM
+
+--- Page 5 ---
+Más Alla de un Segmento: La Regla del Trapecio
+Compuesta
+Un solo trapecio grande puede generar un error considerable. Para mejorar la precisión, dividimos el
+intervalo la, b] en n subintervalos y sumamos las áreas de n trapecios pequeños.
+f(x) A
+Fórmula Compuesta
+a
+a+ ha+ 2h ...a+ 4ha+5h
+b
+x
+b - а
+donde h =
+n
+Error de Truncamiento
+(b - a)"
+Ет =
+-f"(E)
+12n2
+Nota: El error disminuye cuadráticamente con el
+número de subintervalos (n).
+£ NotebookLM
+
+--- Page 6 ---
+Aproximación Cuadrática: La Regla de Simpson 1/3
+¿Qué se ajusta mejor a una curva que una recta? Otra curva. La regla de Simpson 1/3 utiliza
+tres puntos para definir una parábola (polinomio de grado 2) que interpola la función.
+f(x)
+Fórmula Simple (2 Segmentos, n= 2)
+f(a) +45 ("+b) + 5(b)
+donden = b-a
+2
+Error de Truncamiento
+h°
+E=-
+90
+f (4) (E)
+a
+b
+£ NotebooklM
+
+--- Page 7 ---
+Precisión Superior: La Regla de Simpson 1/3 Compuesta
+Aplicamos la aproximación parabólica de forma iterativa sobre múltiples pares de
+subintervalos, logrando una de las aproximaciones más eficientes y precisas.
+f(x)
+Fórmula Compuesta
+a
+b
+Error de Truncamiento
+(6 - a)5
+Ecomp = -
+f(1) (E)
+180n4
+Restricción Clave: Para esta regla, el
+número de subintervalos n debe ser par.
+£ NotebookLM
+
+--- Page 8 ---
+Un Refinamiento Adicional: La Regla de Simpson 318
+Para un ajuste aún más preciso, podemos usar un polinomio de grado 3. La regla de Simpson 3/8
+— utiliza cuatro puntos equidistantes para definir una cúbica que aproxima la función.
+f (x) T
+Fórmula Simple (3 Segmentos, n=3)
+3h
+[f(a) + 3f (x1) + 3f(x2) + f(b)]
+h
+h
+h
+a
+X1
+X2
+b
+b - a
+donde h =
+3
+Error de Truncamiento
+Ет =
+3h5
+f (1) ($)
+80
+£ NotebookLM
+
+--- Page 9 ---
+Aplicación Compuesta: Regla de Simpson 3/8
+Al igual que con las otras reglas, podemos aplicarla de forma compuesta para integrar sobre
+intervalos más largos, siempre que el número de divisiones sea compatible.
+Source Serif Pro
+f(x)
+h h h
+Co=a X1
+X2
+h
+h
+h
+h
+XA
+25
+X7
+h
+xg=b
+Fórmula Compuesta
+S rea 5 (10) + 3 5
+Z f(xi)
+i=1,4,7,...
++ 3
+i=2,5,8,...
+i=3,6,9,...
+Error de Truncamiento
+(b - a)5
+E =
+-f (4) (g)
+6480
+Restricción Clave: Para esta regla, el número
+de subintervalos n debe ser un múltiplo de 3.
+£ NotebookLM
+
+--- Page 10 ---
+El Fundamento: La Regla del Rectángulo (Punto Medio)
+La aproximación más fundamental. El área se estima sumando las áreas de rectángulos. La
+altura de cada rectángulo se define por el valor de la función en el punto medio de su base.
+Fórmula Compuesta
+b - a
+donde h =
+n
+h
+b
+£ NotebooklM
+
+--- Page 11 ---
+De la Teoría al Código: Implementación en Python
+La verdadera potencia de estos métodos reside en su fácil implementación
+computacional. Veamos cómo traducir las fórmulas de las reglas compuestas a código
+Python funcional utilizando la librería'
+numpy.
+£ NotebookLM
+
+--- Page 12 ---
+Código: Trapecio Compuesto vs. Simpson 1/3 Compuesto
+**Regla del Trapecio Compuesta**
+# Definimos la función, límites у n
+h = (b - a) / n
+× = np. linspace(a, b, n + 1)
+y = funcion (x)
+integral = (h / 2) * (y[0] + 2 *
+np.sum(y[1:n]) + y[-1])
+**Regla de Simpson 1/3 Compuesta**
+# n debe ser par
+h = (b - a) / n
+x = np. linspace(a, b, n + 1)
+y = funcion(x)
+S = y[0] + y[-1] + 4 * np.sum(y[1:n:2])
++ 2 * np.sum(y[2:n-1:2])
+integral = (h / 3) * S
+£ NotebookLM
+
+--- Page 13 ---
+Código: Rectángulo (Punto Medio) vs. Simpson 3/8 Compuesto
+**Regla del Rectángulo Medio Compuesta** **Regla de Simpson 3/8 Compuesta**
+# Definimos la función, límites y n
+h = (b - a) / n
+x_medio = np. linspace(a + h/2, b - h/2,
+n)
+integral = h * np.sum(funcion(x_medio))
+# n debe ser múltiplo de 3
+h = (b - a) / n
+x = np.linspace(a, b, n + 1)
+y = funcion(x)
+S = y[0] + y[-1] + 3*nр.sum(y[1:n:3]) +
+3*np. sum(y[2:n:3]) + 2*np.sum(y[3:n-
+1:3])
+integral = (3 * h / 8) * S
+£ NotebookLM
+
+--- Page 14 ---
+Resumen Comparativo: Eligiendo la Herramienta Correcta
+Regla
+Rectángulo
+(Punto Medio)
+Trapecio
+Simpson 1/3
+Simpson 3/8
+Grado
+Polinomio
+0 (Constante)
+1 (Lineal)
+2 (Cuadrático)
+3 (Cúbico)
+Puntos /
+Segmento
+1
+2
+3
+4
+Error
+Compuesto
+0(h2)
+0(h2)
+0(h*)
+0(ht)
+Restricción en
+"n"
+Ninguna
+Ninguna
+Debe ser Par
+Múltiplo de 3
+£ NotebookLM
+
+--- Page 15 ---
+Conclusiones Clave del Arte de la Aproximación
+• Aproximar es Poder: La integración numérica nos permite resolver integrales
+complejas sustituyendo la función por polinomios simples.
+• La Precisión Escala con la Complejidad: Aumentar el grado del polinomio
+(Rectángulo → Trapecio → Simpson) mejora significativamente la exactitud
+de la aproximación.
+• Dividir para Conquistar: Las reglas compuestas, que dividen el intervalo en
+múltiples segmentos, son la clave para obtener resultados precisos en la
+práctica.
+• No Hay una "Mejor" Regla: La elección del método es un balance entre la
+precisión deseada (Simpson > Trapecio), la complejidad computacional y las
+restricciones de cada regla (n par, n múltiplo de 3).
+£ NotebooklM

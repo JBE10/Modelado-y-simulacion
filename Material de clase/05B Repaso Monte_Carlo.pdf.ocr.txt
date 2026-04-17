@@ -1,0 +1,364 @@
+--- Page 1 ---
+Resolver lo Insoluble
+con Azar Dirigido
+Una Introducción al Método de Montecarlo
+Modelado y Simulación | Clase 5
+£ NotebooklM
+
+--- Page 2 ---
+¿Qué es el Método de Montecarlo?
+Un Casino Donde la Casa Siempre
+Gana.
+El método de Montecarlo es una técnica
+matemática que utiliza el muestreo
+aleatorio y la probabilidad para aproximar
+soluciones numéricas a problemas
+complejos.
+• Su nombre proviene del famoso casino
+de Monte Carlo, debido al papel
+fundamental que juega el azar en el
+método.
+• Se emplea en situaciones donde es
+difícil o imposible obtener una solución
+analítica exacta.
+Basado en el azar
+Utiliza simulaciones repetitivas
+con números aleatorios.
+Poderoso para lo
+complejo
+Ideal para problemas sin
+solución analítica.
+Multidisciplinario
+Se aplica en física, finanzas,
+ingeniería, inteligencia
+artificial y más.
+£ NotebookLM
+
+--- Page 3 ---
+La Receta de 4 Pasos para la Simulación
+El procedimiento básico del método sigue una estructura clara y lógica,
+transformando un problema complejo en una serie de pasos manejables.
+1
+Definir el
+Dominio
+Establecer el universo
+de posibles valores
+para el problema.
+2
+Generar Muestras
+Aleatorias
+Crear un gran número
+de valores aleatorios
+dentro de ese
+dominio.
+3
+f(x)
+>=•
+Evaluar la
+Función
+Aplicar la función del
+problema a cada valor
+aleatorio generado.
+Calcular la
+Estimación
+Agregar los resultados
+para obtener una
+aproximación de la
+solución final.
+£ NotebookLM
+
+--- Page 4 ---
+Un Ejemplo Clásico: ¿Podemos
+Calcular n Lanzando Dardos?
+Para entender el poder del método de forma
+intuitiva, vamos a estimar el valor de n usando pura
+aleatoriedad. Imaginemos un tablero de dardos
+digital.
+El Montaje del Juego:
+1. El Tablero: Dibujamos un cuadrado de lado 2
+(área = 4) centrado en el origen.
+2. El Objetivo: Inscribimos un círculo de radio 1
+(área = n* 12 = ) dentro del cuadrado.
+3. La Regla: Lanzamos miles de "dardos" (puntos
+aleatorios) al cuadrado.
+4. El Conteo: Contamos cuántos dardos caen
+dentro del círculo.
+0
+-1
+-1
+A NotebookLM
+
+--- Page 5 ---
+La Magia de la Convergencia: A Más Lanzamientos, Mayor Precisión
+A medida que aumentamos el número de puntos aleatorios generados, la proporción de puntos que caen dentro del círculo
+se acerca cada vez más a la proporción de las áreas (Área del Círculo / Área del Cuadrado), revelando el valor de n.
+Representacion Gráfica
+de Lanzamientos
+1995 Lanzamientos
+3414 Lanzamientos
+1558 en el circulo
+2683 en el circulo
+1-
+1
+П = 3.1238
+0-
+п = 3.1435
+5843 Lanzamientos
+4601 en el circulo
+10000 Lanzamientos
+7839 en el circulo
+1
+п = 3.1498
+П = 3.1356
+-1 +
+1
+-1
+-1
+1
+£ NotebookLM
+
+--- Page 6 ---
+La Lógica Detrás del Juego: De la Proporción
+de Puntos al Valor de T
+La relación entre los puntos y las áreas nos da una fórmula simple para nuestra estimación. La
+proporción de dardos que aciertan en el círculo es aproximadamente igual a la proporción del área del
+círculo respecto al área del cuadrado.
+Puntos dentro
+Puntos totales
+Área Círculo
+Area Cuadrado
+Puntos dentro
+Puntos totales
+T
+puntos dentro del círculo
+Fórmula Clave: ~ 4*
+total de puntos
+£ NotebookLM
+
+--- Page 7 ---
+Del Concepto al Código: Implementando la
+Estimación de n en Python
+La elegancia del método de Montecarlo
+se refleja en su implementación. Con
+unas pocas líneas de código, podemos
+simular millones de lanzamientos y
+obtener una estimación precisa de n.
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+import random
+# Número de puntos aleatorios
+num_puntos = 1000000
+puntos_dentro = 0
+# Generamos los puntos aleatorios
+for _ in range(num_puntos):
+x = random.uniform(-1, 1)
+V = random.uniform(-1, 1)
+#Si el punto cae dentro del círculo unitario, sumamos al contador
+if x#*2 + y**2 <= 1:
+puntos_dentro += 1
+# Estimación de pi usando la relación de áreas
+pi_estimado = (puntos_dentro / num_puntos) * 4
+print (f"Estimación de n usando Montecarlo: (pi_estimado}")
+£ NotebookLM
+
+--- Page 8 ---
+¿Por Qué Funciona? La Ley que Gobierna el Azar
+La fiabilidad del método de Montecarlo no es un accidente; se basa en un principio fundamental de
+la estadística: la Ley de los Grandes Números (LGN). Esta ley garantiza que, a medida que aumenta
+el número de simulaciones, el resultado promedio de nuestras muestras aleatorias converge de
+manera predecible hacia el valor real o esperado.
+El azar, en grandes cantidades, se vuelve ordenado.
+£ NotebookLM
+
+--- Page 9 ---
+La Ley de los Grandes Números: La Garantía
+Matemática de la Convergencia
+La LGN establece que si las muestras son independientes e idénticamente
+distribuidas, el promedio de la muestra se aproxima al valor esperado de la
+población a medida que el tamaño de la muestra (n) tiende a infinito.
+a
+1
+lim -
+n>∞ n
+f (xi) = E[f(x)]
+2=1
+En términos simples: El promedio de los resultados de tus 'lanzamientos' se
+acercará al verdadero valor promedio si sigues lanzando. Para la integración, este
+"valor promedio" está directamente relacionado con el valor de la integral.
+£ NotebookLM
+
+--- Page 10 ---
+Más Allá de n: El Poder de Montecarlo para la
+Integración Numérica
+El cálculo del área de un círculo es un caso de integración. El
+У +
+método se puede generalizar para estimar cualquier integral
+definida, especialmente aquellas que son difíciles o imposibles de
+resolver analíticamente.
+f(x)
+Concepto Clave: La integral puede expresarse como el producto
+del volumen del dominio por el valor esperado de la función.
+La Estimación Montecarlo: El valor de la integral (i) se aproxima
+multiplicando la longitud del intervalo por el promedio de los
+valores de la función en los puntos aleatorios.
+Fórmula de Integración 1D
+Î = (6-a). =
+•
+f (xi)
+Xi
+i=1
+£ NotebooklM
+
+--- Page 11 ---
+¿Cuan Confiables Son Nuestras Estimaciones
+Aleatorias?
+Una estimación es útil, pero es aún más útil si
+conocemos su precisión. Dado que el método es
+estocástico (basado en el azar), cada ejecución
+producirá un resultado ligeramente diferente.
+Los Intervalos de Confianza nos permiten
+cuantificar esta incertidumbre. En lugar de dar
+un único número como respuesta,
+proporcionamos un rango de valores dentro del
+cual es muy probable que se encuentre el
+verdadero valor de la integral.
+Intervalo de
+Confianza
+(e.g., 95%)
+£ NotebookLM
+
+--- Page 12 ---
+El Kit de Herramientas Estadísticas para Medir la
+Incertidumbre
+Usamos la desviación estándar de nuestras muestras para construir un intervalo de confianza
+alrededor de nuestra integral estimada (Î).
+Fórmulas Clave
+Tabla de Valores Críticos (z)
+1. **Desviación Estándar (o):** Mide la dispersión de los valores de
+Nivel de Confianza
+Valor z
+f (xi).
+0=
+> (f (xi) - I) 2
+n - 1
+2. **Error Estándar (EE):** Estima la desviación estándar del
+promedio de la muestra.
+90%
+1.645
+95%
+1.960
+99%
+EE =
+2.576
+Vn
+3. **Intervalo de Confianza (IC):** El rango que contiene el valor
+verdadero con una cierta probabilidad.
+IC =Î ‡ 2-
+V
+n
+£ NotebookLM
+
+--- Page 13 ---
+La Materia Prima: Generación de
+Números Aleatorios
+La calidad de una simulación de Montecarlo depende de la calidad de sus números aleatorios.
+Python ofrece herramientas sencillas para generar distribuciones uniformes.
+Generación Aleatoria
+La función 'random. uniform(a, b)' genera
+un número flotante aleatorio en el
+intervalo [a, b]. Cada ejecución produce
+una secuencia diferente.
+# Genera 5 números aleatorios entre 0 y 1
+import random
+for _ in range(5):
+print (random. uniform(0, 1))
+# Output: 0.1531..., 0.0006..., etc.
+Generación Reproducible
+(con Semilla)
+Usar 'random. seed (valor)' fija la secuencia
+de números aleatorios. Esto es crucial para
+que los experimentos y las simulaciones sean
+reproducibles.
+random.seed (42)
+# Genera 5 números predecibles
+for _ in range(5):
+print(random.uniform(0, 1))
+# Output siempre será: 0.6394..., 0.0250..., etc.
+£ NotebookLM
+
+--- Page 14 ---
+Escalando el Poder: De Integrales Simples a Problemas
+Multidimensionales
+La verdadera fortaleza del método de Montecarlo emerge en problemas de alta dimensión. Mientras que los
+métodos de integración tradicionales sufren de la "maldición de la dimensionalidad" (la complejidad crece
+exponencialmente con las dimensiones), la complejidad de Montecarlo crece de manera mucho más manejable.
+Ejemplo: Integral Doble (2D)
+Para una integral en un rectángulo [a, b] x [c, d]:
+I =
+f (x,y) dy dx
+a,b
+c,d
+La estimación es una extensión natural del caso 1D: el
+"volumen" ahora es el área del rectángulo.
+Î = (b-a)* (d-c)*
+Lf (Xi, yi)
+Donde (xi, yi) son puntos muestreados uniformemente
+dentro del rectángulo.
+a
+b
+a
+£ NotebookLM
+
+--- Page 15 ---
+Montecarlo: Principios Fundamentales
+y Poder en Resumen
+A
+Simplicidad y
+Poder
+Resuelve problemas
+complejos mediante
+muestreo aleatorio, una
+idea fundamentalmente
+simple.
+Garantía
+Estadística
+La Ley de los Grandes
+Números asegura que las
+estimaciones convergen
+al valor real con
+suficientes muestras.
+La Precisión es
+Medible
+Los intervalos de
+confianza nos permiten
+cuantificar la
+incertidumbre de
+nuestros resultados.
+Una Herramienta
+Universal
+Su flexibilidad lo hace
+indispensable en dominios
+que van desde las finanzas
+cuantitativas y la física de
+partículas hasta la
+inteligencia artificial y el
+renderizado de gráficos
+por computadora.
+£ NotebookLM

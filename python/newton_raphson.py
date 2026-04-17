@@ -1,7 +1,11 @@
 import math
+import sys
+from typing import Callable, Any
+
+from utils import _res
 
 
-def newton_raphson(f, df, x0, tol=1e-7, max_iter=100):
+def newton_raphson(f: Callable[[float], float], df: Callable[[float], float], x0: float, tol: float = 1e-7, max_iter: int = 100) -> dict[str, Any]:
     historial = []
     xn = float(x0)
 
@@ -23,7 +27,8 @@ def newton_raphson(f, df, x0, tol=1e-7, max_iter=100):
 
         if not math.isfinite(dfx):
             return _res(xn, i - 1, historial, False, f"f'(x_n) no es finito en iter {i}: {dfx}.")
-        if abs(dfx) < 1e-14:
+        
+        if abs(dfx) <= sys.float_info.epsilon:
             return _res(xn, i - 1, historial, False, f"Derivada casi nula en iter {i}.")
 
         x_next = xn - fx / dfx
@@ -53,16 +58,11 @@ def newton_raphson(f, df, x0, tol=1e-7, max_iter=100):
         xn, fx = x_next, fx_next
 
     return _res(xn, max_iter, historial, False,
-                f"No convergio en {max_iter} iteraciones.")
-
-
-def _res(raiz, iteraciones, historial, convergio, justificacion):
-    return {"raiz": raiz, "iteraciones": iteraciones, "historial": historial,
-            "convergio": convergio, "justificacion": justificacion}
+                f"No convergio tras {max_iter} iter, ult error: {abs(f(xn)):.4e}")
 
 
 if __name__ == "__main__":
     f = lambda x: x**3 - x - 2
-    df = lambda x: 3 * x**2 - 1
-    res = newton_raphson(f, df, 1.5, tol=1e-10)
+    df = lambda x: 3*x**2 - 1
+    res = newton_raphson(f, df, 1.5, tol=1e-10, max_iter=50)
     print(f"Raiz: {res['raiz']:.12f}  |  Iter: {res['iteraciones']}  |  f(raiz): {f(res['raiz']):.4e}")

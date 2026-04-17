@@ -1,9 +1,14 @@
 import math
+from typing import Callable, Any, Optional
+
+from utils import _res
 
 
-def punto_fijo(g, x0, tol=1e-4, max_iter=20, f=None):
+def punto_fijo(g: Callable[[float], float], x0: float, tol: float = 1e-4, max_iter: int = 20, f: Optional[Callable[[float], float]] = None) -> dict[str, Any]:
     historial = []
     xn = float(x0)
+    prev_error = float('inf')
+    divergencias_consecutivas = 0
 
     for i in range(1, max_iter + 1):
         try:
@@ -25,13 +30,16 @@ def punto_fijo(g, x0, tol=1e-4, max_iter=20, f=None):
 
         if error < tol:
             return _res(x_next, i, historial, True, f"Convergio en {i} iteraciones.")
+            
+        if i > 1 and error > prev_error:
+            divergencias_consecutivas += 1
+            if divergencias_consecutivas >= 3:
+                return _res(x_next, i, historial, False, f"Early stop: Divergencia detectada tras {i} iteraciones.")
+        else:
+            divergencias_consecutivas = 0
 
+        prev_error = error
         xn = x_next
 
     return _res(xn, max_iter, historial, False,
                 f"No convergio en {max_iter} iteraciones.")
-
-
-def _res(raiz, iteraciones, historial, convergio, justificacion):
-    return {"raiz": raiz, "iteraciones": iteraciones, "historial": historial,
-            "convergio": convergio, "justificacion": justificacion}

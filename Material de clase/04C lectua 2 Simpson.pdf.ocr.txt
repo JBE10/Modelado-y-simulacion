@@ -1,0 +1,349 @@
+--- Page 1 ---
+El Método de Simpson: De la Intuición a la Precisión
+Un Análisis Profundo de la Regla de Integración Numérica para la Lectura y Distribución
+Este documento está diseñado para ser autocontenido y comprensible sin un presentador.
+£ NotebookLM l
+
+--- Page 2 ---
+La Idea Central: Aproximar el Área con Parábolas
+El desafío fundamental es calcular integrales
+definidas Jf(x) dx cuando la primitiva de f(x) no
+es accesible. Los métodos numéricos
+aproximan este área.
+- Métodos Simples: Usan formas geométricas
+básicas. La regla del rectángulo usa una
+función constante; la regla del trapecio usa una
+función lineal.
+- El Avance de Simpson: La clave del método
+de Simpson es usar una aproximación
+superior: un polinomio cuadrático (una
+parábola) que pasa por tres puntos. Esto
+permite capturar la curvatura de la función con
+mucha mayor fidelidad.
+Aproximación Constante
+Aproximación Lineal
+Aproximación Cuadrática
+£ NotebookLM
+
+--- Page 3 ---
+La Fórmula para una "Celda": Construyendo el Bloque Fundamental
+(h, f(h))
+(-h, f(-h))
+(0, f (0))
+-h
+0
+h
+El método se construye a partir de una unidad básica o "celda", definida en un intervalo simétrico
+[-h, h]. El área bajo la parábola que interpola los puntos f(-h), f(0) y f(h) es una aproximación a
+la integral.
+4 weighting factor
+h
+f(x) dx ~
+-h
+(f(-h)+4f(0) + f(h))
+secondary factor
+* Esta fórmula surge de integrar el polinomio interpolador de Lagrange L2(x).
+* Los coeficientes '1, 4, 1' actúan como ponderaciones para los tres puntos funcionales.
+£ NotebookLM
+
+--- Page 4 ---
+Academic Elegance
+El Precio de la Precisión: Análisis del Término de Error
+Toda aproximación tiene un error. La fórmula exacta para una celda de Simpson revela la magnitud y
+naturaleza de este error.
+Error =
+h
+h5
+1(0) da - [5 (4-1 + 4f0 + fi) = - 90 ('(6)
+para algún § en [-h, h]
+Implicaciones Clave
+1. Exactitud Sorprendente
+Si f(x) es un polinomio de grado ≤ 3, su cuarta
+derivada f(4) (x) es cero. Por lo tanto, el error es
+cero. El método de Simpson es exacto para
+polinomios cúbicos, a pesar de usar una
+aproximación cuadrática.
+2. Dependencia de la Curvatura
+El error depende de f(4), que mide la "variación en
+la curvatura" de la función.
+3. Orden de Convergencia
+El error es de orden O(h5), lo que significa que
+disminuye muy rápidamente a medida que el
+tamaño del paso h se reduce.
+£ NotebookLM
+
+--- Page 5 ---
+Escalando la Solución: La Regla Compuesta para el Intervalo [a, b]
+X2n
+Хз
+X2n-1
+fo
+Х4
+a
+X1
+X2
+Хз
+X4
+X5
+X2n-1
+X2n
+Para aplicar el método a un intervalo [a, b], lo subdividimos en n celdas (lo que requiere 2n
+subintervalos de ancho h). El paso h se define como h = 2n. Luego, sumamos las aproximaciones
+de cada celda.
+b
+h
+3
+fo+4 Et2x-1) +2
++ f2n
+Explicación de la Fórmula:
+• foy f2n: Los puntos extremos del intervalo
+• E f2k-1: Suma de los valores en los puntos "impares" (centros de celda), ponderados por 4.
+• Efzk: Suma de los valores en los puntos "pares" interiores (bordes de celda), ponderados por 2.
+£ NotebooklM
+
+--- Page 6 ---
+El Error Global: Acumulación, Control y Orden del Método
+El error total en el intervalo [a, b] es la suma de los
+errores de cada una de las n celdas. Esta
+acumulación resulta en una fórmula de error global.
+(b - a)h4
+Error Total = -
+180
+• f (4) (5)
+para algún § en [a, b].
+Análisis del Error:
+• El error global es de orden 0(h4).
+• Esto confirma la alta precisión del método: si
+reducimos el tamaño del paso h a la mitad, el
+error de truncamiento se reduce
+aproximadamente 16 veces.
+Visualización del Orden 'O(h4)'
+Paso h
+Paso h/2'
+Error ~ E
+Reducir h a la mitad
+Error ~ E/16
+£ NotebookLM
+
+--- Page 7 ---
+Acotando la Incertidumbre: Límites Superiores e Inferiores del Error
+En la práctica, no conocemos el valor exacto de f(4) (§). Sin embargo, podemos encontrar los
+valores máximo y mínimo de |f (4) (x)| en el intervalo [a, b].
+Definiciones:
+• M4 = max{|f(4) (x)| : x € [a, b]} (El peor escenario de curvatura).
+• m1 = min{|f(4) (x)| : x € [a, b]} (El mejor escenario de curvatura).
+Desigualdad Clave para el Error Absoluto:
+Con I como el valor exacto y Î, como la aproximación de Simpson, podemos garantizar:
+b - a
+b - a
+≤|I - İsl
+180
+-*mA * ht
+180
+-* M4 * h*
+Utilidad:
+Esta desigualdad nos permite "atrapar" el error real
+dentro de un rango conocido, dándonos un
+certificado de la calidad de nuestra aproximación.
+Rango de Error: [Îs - Error Sup., Îs + Error Sup.]
+Îs + Error Superior
+Is + Error Superior
+Îs- Error Superior
+Îs
+Îs- Error Supre NotebooklM
+
+--- Page 8 ---
+El Objetivo Final: Cómo Alcanzar una Tolerancia ' Deseada
+El problema práctico más común es: "Quiero que mi resultado tenga un error absoluto máximo de r
+(ej. 10-5). ¿Qué valor de h necesito para garantizarlo?"
+Derivación
+Para asegurar que |I - Îs| ≤ T, forzamos que la cota superior del error sea menor o igual a т:
+b - a
+-* M4 *h*≤T
+180
+La Fórmula para el Paso Máximo (hmax):
+Resolviendo para h, obtenemos la herramienta final para el diseño del cálculo (asumiendo precisión
+infinita):
+180T
+hmax =
+4
+V
+(b - a)M4
+Conclusión
+Cualquier paso h ≤ hmax garantizará que la aproximación cumple con la tolerancia requerida.
+£ NotebookIM
+
+--- Page 9 ---
+La Realidad del Cómputo: El Impacto de la Precisión Finita 6
+Nuestro análisis hasta ahora ha asumido una
+"precisión infinita". En la realidad, las
+computadoras almacenan números con una
+precisión finita (8), introduciendo pequeños
+errores de redondeo en cada cálculo de f(x;).
+El Dilema del Error:
+• Error de Truncamiento: Proviene de la
+aproximación matemática. Disminuye con h
+(proporcional a h4).
+• Error de Redondeo: Proviene de la precisión
+finita de la máquina. Aumenta a medida que h
+disminuye (más pasos = más acumulación).
+La Pregunta Clave:
+¿Cómo debe modificarse hmax? Reducir h
+indefinidamente puede empeorar el resultado final.
+Error de Truncamiento (~h4)
+Error Total
+h óptimo
+Error de Redondeo (~1/h)
+h (Tamaño del paso)
+£ NotebookLM
+
+--- Page 10 ---
+Puesta en Práctica: Estudio de Caso
+problema: Calcular la integral definida: ) 2%e-= ax
+Objetivos del Análisis:
+1. Determinar el valor máximo de h (hmax)
+para lograr una tolerancia + dada,
+asumiendo precisión infinita.
+2. Reconsiderar el problema bajo la
+suposición de que solo se retienen tres
+cifras decimales en los cálculos de la
+función, explorando el impacto de la
+precisión finita.
+0
+1
+y = x*e-*
+2
+3
+4
+£ NotebookLM
+
+--- Page 11 ---
+Paso 1: Analizar la Curvatura de la Función (f(4))
+Texto Principal: El control del error depende de
+M4, el valor máximo de la cuarta derivada en el
+intervalo.
+y = (x-4)e-x
+1
+0
+Cálculos:
+Función: f(x) = x*e-×
+Primera derivada: f'(x) = (1-x)e-x
+-1
+T
+-2
+Cuarta derivada: f(4)(x) = (x-4)e-x
+-3
+Determinación de M4:
+Necesitamos encontrar M4 = max{| (x-4)e*}
+para x e [0, 4]. Analizando f(4)(*) en el intervalo,
+el máximo absoluto ocurre en x=0, donde
+|f(4) (O)| = |-4| = 4. Por lo tanto, M4 = 4.
+-4 - 0<
+Máximo valor absoluto:
+f(4)(0)| 4
+-5
+0
+1
+2
+3
+4
+£ NotebookLM
+
+--- Page 12 ---
+Paso 2: Calcular hmax para una Tolerancia t = 10-5
+Texto Principal: Utilizando la fórmula para el paso máximo y los valores de nuestro problema, podemos calcular
+el h necesario.
+**Datos**
+- Intervalo: [a, b] = [0, 4]
+- Tolerancia: T = 10-5
+- M4 = 4 (del paso anterior)
+hmax =
+**Aplicación de la Fórmula**
+hmax
+hmax
+4
+4
+180• T
+V
+(b- a) • M4
+4
+V
+180• 10-5
+(4 - 0) • 4°
+180 • 10-5
+~ 0.183
+16
+**Interpretación Práctica**
+- Debemos elegir un paso h ≤ 0.183.
+- Para determinar el número de subintervalos 2n, usamos h = (b-a)/2n. 2n = (b-a)/h = 4 / 0.183 ~ 21.8
+- Debemos elegir el siguiente entero par, por lo tanto 2n = 22. El paso real a usar sería h = 4/22 ~ 0.1818.
+£ NotebooklM
+
+--- Page 13 ---
+Paso 3: El Impacto de una Precisión de Tres Cifras
+Decimales
+Texto Principal:
+Reconsideremos el problema "suponiendo que solamente
+tres cifras decimales son retenidas".
+". Esto introduce un error
+de redondeo en cada evaluación de f(xi) = x;*e-*;.
+Análisis Cualitativo:
+- Cada valor f (xi) que usamos en la suma de Simpson no es
+exacto, sino una versión redondeada.
+- Si usamos un h muy pequeño (ej. h = 0.001), necesitamos
+sumar miles de estos valores imprecisos.
+- La acumulación de miles de pequeños errores de
+redondeo puede "contaminar" el resultado y volverse más
+grande que el error de truncamiento teórico.
+Ef(x.) = f(x1) + f(22) +...+ f(Xn) = Acumulado
+Conclusión Práctica:
+La fórmula para "h_max' es una guía para el error de truncamiento. En un escenario de baja precisión,
+no podemos reducir 'h' indefinidamente esperando mejores resultados. Existe un límite
+práctico en la precisión alcanzable, dictado por la aritmética de la máquina.
+£ NotebookLM
+
+--- Page 14 ---
+Síntesis: Comparativa de Métodos de Integración
+La elección del método de integración implica un compromiso entre simplicidad y precisión. El método
+de Simpson destaca por su eficiencia en funciones suaves.
+Característica
+Aproximación
+Geométrica
+Polinomio Exacto
+Error Global
+Requisitos de la Función
+Regla del Rectángulo
+Constante (Rectángulo)
+Grado 0
+0(h)
+fECI
+Regla del Trapecio
+Lineal (Trapecio)
+Grado 1
+0(h2)
+fE C'
+Regla de Simpson
+Cuadrática (Parábola)
+Grado 3
+0(h4)
+fE CA
+Al NotebookLM
+
+--- Page 15 ---
+Conclusiones: El Poder de la Aproximación y el
+Control del Error
+Puntos Clave:
+1. La Intuición Geométrica es la Clave
+La superioridad de Simpson no nace de una fórmula compleja, sino de una idea simple
+y potente: aproximar con parábolas captura mejor la realidad de la función.
+2. El Error No es un Fracaso, es Información
+Entender la estructura del término de error O(h4) y su dependencia de f(4) es lo que
+nos permite pasar de una simple aproximación a una ingeniería de precisión.
+3. La Teoría Guía, la Realidad Limita
+Las fórmulas teóricas nos dan un objetivo (h_max), pero la precisión finita del cómputo
+impone límites prácticos. El arte del análisis numérico reside en equilibrar ambas.
+4. Una Lección Universal
+El método de Simpson es un microcosmos del análisis numérico: un constante balance
+entre la precisión del modelo matemático, el costo computacional y la estabilidad frente
+a las limitaciones del hardware.
+£ NotebookLM

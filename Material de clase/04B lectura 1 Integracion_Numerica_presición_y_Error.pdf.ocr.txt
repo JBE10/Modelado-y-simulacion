@@ -1,0 +1,254 @@
+--- Page 1 ---
+El Arte de la
+Aproximación Numérica
+Construyendo Precisión para la Integral Definida
+£ NotebooklM
+
+--- Page 2 ---
+El Desafío Central: La Integral "Insoluble"
+Buscamos un valor numérico Î que sea una
+excelente aproximación del valor exacto de
+una integral, I.
+f (x)
+Muchas funciones, aunque continuas, no
+tienen una primitiva elemental. El cálculo
+exacto de I es imposible.
+Pensemos en la integral Gaussiana,
+fundamental en estadística: / e-*° dx.
+I
+a
+b
+Nuestra estrategia: Reemplazar el complejo
+cálculo de I por una suma de áreas de
+figuras geométricas simples que podamos
+calcular fácilmente.
+£ NotebookLM
+
+--- Page 3 ---
+Una Herramienta Teórica Fundamental: El
+Lema del Valor Medio
+Si f y g son continuas en [a, b], y g(x) ≥ 0 en todo el intervalo, entonces existe un § € [a, b] tal que:
+t,b
+•t,b
+g(x) dx
+Intuición у Clave de la Demostración
+La idea es que la función f(x) puede ser "sacada" de la integral evaluándola en un punto intermedio §.
+Esto es posible porque g(x) no cambia de signo.
+1. festá acotada: m ≤ f(x) ≤ M.
+2. Como g(x) ≥ 0, podemos multiplicar: mg(x) ≤ f(x)g(x) ≤ Mg(x).
+3. Integramos la desigualdad: m {g(x)dx ≤ Jf(x)g(x)dx ≤ M Jg(x)dx.
+4. Por el Teorema del Valor Intermedio, f debe tomar un valor f(§) que satisfaga la igualdad.
+
+--- Page 4 ---
+MÉTODO 1: La Regla del Rectángulo
+La Aproximación Más Directa: El Área de un Rectángulo.
+f(x)
+-h/2
+h/2
+Aproximamos el área bajo la curva en un pequeño intervalo usando un
+único rectángulo cuyo alto es el valor de la función en el punto medio.
+£ NotebookLM
+
+--- Page 5 ---
+Análisis de una Celda Unitaria: Fórmula у Error
+Para una función f € C°([-h/2, h/21), analizamos la integral en una celda de ancho h.
+The Formula
+h/2
+f(x) dx ~h. f(0)
+-h/2
+The Error Term
+h/2
+f(x)dx = hfo+ Er
+-h/2
+h3
+Er =
+24
+para algún § € [-h/2, h/2].
+Donde fo = f(0).
+El Mensaje Clave
+El error depende del cubo del paso h (h°) y de la curvatura de la función (f"). Una función más
+'plana' (pequeña f") o un paso más pequeño reducen drásticamente el error.
+£ NotebookLM
+
+--- Page 6 ---
+La Regla Compuesta: Sumando Rectángulos de [a, b]
+La Lógica
+Paso 1: Dividimos el intervalo [a, b]
+en n subintervalos (celdas) de
+ancho h = (b-a)/n.
+Paso 2: Aplicamos la regla del
+rectángulo en cada celda y
+sumamos los resultados.
+Definiciones: La partición se
+define: xk= a + kh.
+Los puntos medios son Xk+1/2•
+n-1
+I, = hE f (Xk+1/2)
+k=0
+f(x)
+a
+b
+Al NotebookLM
+
+--- Page 7 ---
+Análisis de Error Global y Cotas Prácticas
+(b- a)h?
+I -Î, =
+f"($)
+24
+para algún § € [a, b]
+Esto demuestra que el error global es de orden 2: |I —Îr|= 0(h2).
+Ganancia Cuadrática
+¡Al reducir el paso h a la mitad, el error se reduce
+aproximadamente cuatro veces! Esta es una propiedad
+fundamental de los métodos de segundo orden.
+Cotas de Error Prácticas
+Podemos acotar el error absoluto sin conocer §, usando el mínimo y máximo de la segunda derivada.
+(b - a)mz
+m2 = min|f" (x)|, M2 = max|f"(x)| en [a, b]
+£ NotebookLM
+
+--- Page 8 ---
+MÉTODO 2: La Regla del Trapecio
+Una Mejora Intuitiva:
+Conectando los Extremos.
+f(x)
+0
+h
+En lugar de un punto medio, usamos los
+dos extremos del intervalo para formar
+un trapecio. La aproximación mejora al
+reemplazar una línea horizontal por
+una secante.
+£ NotebookLM
+
+--- Page 9 ---
+Análisis de una Celda Unitaria: Fórmula у Error
+Para una función f e C2([0, h]), analizamos la integral en una celda de ancho h.
+1. 5(*) x = 200+51) +Es
+h3
+Et = - 12f"(3)
+para algún § € [0, h].
+J. (x) dx==((0) + 5(h))
+Donde fo = f(0) y f1 = f(h).
+El Mensaje Clave
+El error sigue dependiendo de h3 y f", como en la regla del rectángulo. Sin embargo, el coeficiente
+numérico (1/12) es el doble que el anterior (1/24). Esto es una pista importante sobre su rendimiento
+comparativo.
+£ NotebookLM
+
+--- Page 10 ---
+La Regla Compuesta: Sumando Trapecios de [a, b]
+Paso 1: Nuevamente, dividimos el
+intervalo [a, b] en n subintervalos de
+ancho h.
+Paso 2: Sumamos las áreas de los
+trapecios de cada subintervalo.
+Ît =
+h
+2
+n-1
+fo +2_ Jk + In
+k=1
+f (x) ^
+Notar que los puntos interiores (k) se
+usan dos veces (como final de un
+trapecio y comienzo del siguiente),
+mientras que los extremos (fo, fn)
+solo una vez.
+a
+X1
+X2
+Хз
+X4
+b
+£ NotebooklM
+
+--- Page 11 ---
+Análisis de Error Global y Cotas Prácticas
+(b - a)h?
+I - Ît = -
+f"'($)
+12
+para algún § E [a, b]
+El método del trapecio también es de orden 2:
+Comparando Errores
+El término de error es, en general, el doble que el de la
+regla del rectángulo. Para la misma h, el método del
+rectángulo (con punto medio) suele ser más preciso.
+Cotas de Error Prácticas
+(1-a)m2)
+h?
+mz = min|f"(x)|, M2 = max|f"(x)| en [a, b].
+£ NotebookLM
+
+--- Page 12 ---
+Aplicación Práctica: Cómo Garantizar la Tolerancia Deseada
+Dado un error máximo aceptable (tolerancia) t, ¿cuál es el paso máximo hmax que podemos usar?
+Despejamos h de la cota de error superior: |I -Î| ≤ T.
+Regla del Rectángulo
+Regla del Trapecio
+)h2 ≤ T
+( - a)M2
+12 ≤ T
+6T
+hmax = 2V (b-a) Mz
+3т
+Amax = 2V (b- a)M2
+Estas fórmulas nos permiten diseñar nuestro cálculo para cumplir con especificaciones de
+precisión antes de empezar a computar.
+Nota para reflexión: ¿Cómo se modificarían estos valores si la precisión
+de cálculo de la máquina no fuera infinita, sino una precisi NotebooklM
+
+--- Page 13 ---
+Comparativa: Rectángulos vs. Trapecios
+Característica
+Regla del Rectángulo
+Idea Geométrica
+Aproximación por una
+constante (función en el
+punto medio).
+Fórmula Compuesta
+h. ≥ Fk+1/2
+Término de Error Global
+(b - a)h2
+f"(§)
+24
+Regla del Trapecio
+Aproximación por una
+recta (línea secante entre
+extremos).
+(b -a)h?
+-
+12
+Ambos métodos son de orden 0(h2), pero la regla del rectángulo (punto medio) tiene una
+constante de error la mitad de grande, sugiriendo una mayor precisión para un mismo h.
+£ NotebookLM
+
+--- Page 14 ---
+El Origen del Error y los Siguientes Pasos
+La Perspectiva Teórica
+¿De dónde vienen estas fórmulas de error?
+Observación
+Los resultados para ambos métodos pueden
+obtenerse rigurosamente a partir del
+desarrollo en serie de Taylor de la función
+F (x) = 50.* f(t) dt.
+El error es, en esencia, el primer término que
+se trunca en la serie de Taylor. Esto nos da una
+herramienta poderosa para analizar y
+construir métodos aún más precisos.
+El Camino Hacia Adelante
+Las reglas del rectángulo y del trapecio son la
+base de la integración numérica.
+Usando polinomios de mayor grado para la
+aproximación (parábolas en lugar de rectas),
+obtenemos métodos más potentes:
+• Regla de Simpson (0(h4))
+Para dimensiones más altas, otros enfoques
+son necesarios:
+• Método de Montecarlo
+El principio es el mismo: construir una
+aproximación computable y controlar
+rigurosamente el error cometido.
+£ NotebookLM

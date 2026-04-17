@@ -1,0 +1,264 @@
+--- Page 1 ---
+Dos Caminos Hacia la Integral: Precisión
+Determinista vs. Estimación Probabilística
+Un análisis comparativo de métodos numéricos clásicos y Monte Carlo.
+£ NotebookLM
+
+--- Page 2 ---
+El Problema: Calcular una
+Integral Definida con
+Precisión Garantizada
+Nuestro objetivo es resolver la siguiente integral:
+4
+xe x dx
+El Desafío
+No buscamos solo una aproximación. Buscamos un
+resultado que satisfaga una tolerancia de error (T)
+predefinida.
+Pregunta Guía (Parte 1): ¿Cómo podemos calcular
+esta integral con una precisión garantizada y cuáles
+son los límites prácticos de nuestros métodos?
+4
+3
+-
+2
+1
+0
+1
+2
+Área =/ xe "dx
+3
+4
+Ai NotebookLM
+
+--- Page 3 ---
+Las Herramientas Clásicas: Aproximaciones Geométricas
+Abordaremos el problema con tres métodos de cuadratura numérica fundamentales. Cada uno aproxima el
+área bajo la curva de una forma distinta.
+Método de Rectángulos
+Aproxima el área usando
+rectángulos cuya altura se define
+en un punto de cada subintervalo.
+Método de Trapecios
+Mejora la aproximación uniendo
+los puntos de la función con líneas
+rectas, formando trapecios.
+Regla de Simpson
+Utiliza parábolas para aproximar
+la función en cada par de
+subintervalos, logrando una mayor
+precisión.
+£ NotebookLM
+
+--- Page 4 ---
+La Búsqueda de la Precisión:
+Controlando el Error de Truncamiento
+Concepto Clave
+Para cada método, existe una fórmula que acota el error de
+truncamiento en función del tamaño del paso, h, y las derivadas
+de la función. Nuestro objetivo es encontrar el h máximo que
+garantiza que el error sea menor que la tolerancia r.
+El Procedimiento
+1. Establecer la Condición:
+¡Error ST
+2. Usar la Fórmula de Error: Se utiliza la cota de error teórica para
+cada método (Rectángulos, Trapecios, Simpson).
+3. Despejar h: Se resuelve la inecuación para encontrar el valor
+máximo permitido para h.
+Nota Importante
+En este análisis inicial, asumimos una precisión infinita en los
+cálculos. Estamos lidiando únicamente con el error inherente al
+método de aproximación (error de truncamiento).
+Error
+Disminuir h
+Tamaño del paso, h
+£ NotebookLM
+
+--- Page 5 ---
+Una Complicación del Mundo Real: La Precisión Finita
+Nuevo Escenario: Reconsiderar, ahora suponiendo que solamente tres cifras decimales son retenidas en los cálculos de
+los valores de la función.
+Error
+Total
+Error Total
+Error de Redondeo
+Error Mínimo
+Alcanzable
+Error de Truncamiento
+h óptimo
+El Dilema del Error
+• Error de Truncamiento: Disminuye a medida que h se hace más
+pequeño. (Más subintervalos, mejor aproximación).
+• Error de Redondeo: Aumenta a medida que h se hace más pequeño.
+(Más cálculos, más errores de redondeo que se acumulan).
+Tamaño del paso, h
+La Consecuencia
+Existe un h óptimo. Reducir h indefinidamente se vuelve
+contraproducente, ya que el error de redondeo comenzará a
+dominar. La precisión garantizada se vuelve inalcanzable.
+£ NotebookLM
+
+--- Page 6 ---
+El Límite de la Certeza y el
+Salto a la Probabilidad
+• Resumen de la Parte 1: Los métodos clásicos ofrecen
+cotas de error teóricas, pero su precisión práctica está
+limitada por el error de redondeo. La 'garantía' de
+precisión tiene un límite.
+• Introducción al Método de Monte Carlo: Un enfoque
+radicalmente diferente que no se basa en subdivisiones
+geométricas, sino en muestreo aleatorio.
+• Pregunta Guía (Parte 2): ¿Podemos usar la
+probabilidad para resolver integrales? Y si la
+respuesta es aleatoria, ¿cómo podemos confiar en ella?
+A NotebookLM
+
+--- Page 7 ---
+Integración por Monte Carlo:
+La Intuición de los Dardos
+La Analogía
+1. **Dibuja la Caja**: Encierra la función f(x)
+dentro de un rectángulo de área Arect•
+2. **Lanza Dardos Aleatorios**: Genera una gran
+cantidad de puntos (N) aleatorios (x, y) dentro
+del rectángulo.
+3. **Cuenta los Aciertos**: Cuenta cuántos de esos
+puntos (k) caen por debajo de la curva f(x).
+La Estimación
+La proporción de aciertos (k/N) es una
+estimación de la proporción de las áreas.
+Área ~ Arect * (k / N)
+Hemos convertido un problema de cálculo en
+un experimento estadístico.
+(0,0.6)
+0.6
+0
+(0, 0)
+1
+k aciertos
+N puntos totales
+(4,0.6)
+Arect
+3
+(4,0)
+f (x) = xe-*
+£ NotebooklM
+
+--- Page 8 ---
+El Fundamento Estadístico:
+La Distribución Normal
+El Punto de Partida
+Para interpretar los resultados de Monte Carlo,
+necesitamos conceptos básicos de probabilidad y
+estadística.
+La Distribución Normal
+• Describe una población con parámetros de media flic
+y desviación estándar o*-
+• Su densidad de probabilidad 6 viene dada por la
+fórmula:
+(x-Hs)?
+б(х) =
+20z
+2T
+Interpretación del Percentil
+La probabilidad de que una variable x sea menor o igual
+a un valor es el área bajo la curva hasta ese punto.
+N (Hic, Os)
+P{x≤Ha+ 2U0c} = u
+A NotebookLM
+
+--- Page 9 ---
+Del Muestreo a la Predicción:
+El Teorema Central del Límite
+El Vínculo Clave
+Si tomamos una muestra suficientemente grande de tamaño n de cualquier
+distribución, el Teorema Central del Límite nos dice algo poderoso.
+La Media Muestral (x)
+La media de nuestra muestra, x = (1/n) * 2(xx), también sigue una
+distribución normal.
+ž es asintóticamente normal: N(Mx, Ox/Vn)
+Parámetros de la Media Muestral
+• La media de las medias muestrales es la media de la población:
+Mx = Mx.
+• La desviación estándar de las medias muestrales (error estándar) es:
+Ox = 0x/Vn.
+¡Nuestra estimación (la media de las muestras) se vuelve más predecible y
+menos variable a medida que aumentamos el tamaño de la muestra n!
+Población
+Distribución de
+la población
+(cualquiera)
+Muestras pequeñas
+Distribución de
+* para n=5
+Hx
+Muestras grandes
+Distribución de x
+para n=30
+Ox
+Ox =•
+vn
+Hx
+£ NotebookLM
+
+--- Page 10 ---
+Construyendo Confianza en un Resultado Aleatorio
+El Objetivo
+No podemos conocer el valor exacto de la integral (Mx), pero podemos construir un intervalo que, con un cierto
+nivel de confianza, contenga ese valor verdadero.
+y = 1 - a
+nivel de confianza
+a/2
+u = 1 -
+2
+a/2
+Vn
+Vn
+El Lenguaje de la Confianza
+• Nivel de Confianza (y = 1 - a): La probabilidad de que nuestro intervalo contenga el verdadero parámetro M•
+• Nivel de Significancia (a): La probabilidad de que nuestro intervalo no contenga el verdadero parámetro.
+La Lógica
+Usamos la distribución normal de la media muestral (x) para definir los límites de este intervalo.
+£ NotebookLM
+
+--- Page 11 ---
+La Fórmula del Intervalo de Confianza
+El resultado final: El intervalo de confianza para estimar la media de la población ux
+(el valor de nuestra integral) a partir de una media muestral x es:
+Zu: El valor crítico (percentil) de la distribución normal estándar que
+x: Nuestra estimación
+corresponde a una probabilidad acumulada de u = 1 - a/2.
+de la integral (la media
+de las muestras).
+- Zu
++ Zu •
+Ox: La desviación estándar de la población
+(se asume conocida o se estima).
+n: El número de muestras aleatorias
+(nuestros "dardos").
+Esta fórmula nos da un rango numérico y un nivel de confianza estadística,
+respondiendo a la pregunta "¿Cómo podemos confiar en un resultado aleatorio?".
+£ NotebookLM
+
+--- Page 12 ---
+Dos Filosofías de Cálculo: Error Acotado vs. Confianza Estadística
+Métodos Clásicos (Deterministas)
+Filosofía: Aproximación geométrica y sistemática.
+Resultado: Un único valor aproximado.
+Garantía: Una cota superior para el error de
+truncamiento (Error ≤ Cota).
+Limitación: Vulnerable al error de redondeo
+acumulativo; la cota teórica puede no ser
+alcanzable en la práctica.
+Método de Monte Carlo (Probabilístico)
+Filosofía: Muestreo aleatorio y convergencia
+estadística.
+Resultado: Un intervalo de confianza.
+Garantía: Una probabilidad (1-a) de que el valor
+verdadero esté dentro del intervalo
+Ventaja: Robusto frente a la dimensionalidad y la
+complejidad; el control de la precisión se logra
+aumentando n.
+La elección del método depende del problema: si se necesita una garantía de error acotado en un
+sistema ideal, o una estimación confiable en un mundo de complejidad у aleatoriedad.
+£ NotebookLM
