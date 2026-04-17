@@ -1276,13 +1276,11 @@ if algoritmo == "Monte Carlo":
                         m2.metric("Margen de Error (±)", f"{res_1d['margen_error']:.8f}")
                         m3.metric(f"IC al {confianza}", "Ver Tabla Abajo")
                         
-                        import pandas as pd
-                        st.table(pd.DataFrame([{
-                            "Integral Estimada (Î)": f"{res_1d['integral']:.10f}",
-                            "Margen de Error": f"{res_1d['margen_error']:.10f}",
-                            f"Límite Inferior ({confianza})": f"{res_1d['ic_inferior']:.10f}",
-                            f"Límite Superior ({confianza})": f"{res_1d['ic_superior']:.10f}"
-                        }]))
+                        st.markdown("#### Resultado Detallado")
+                        st.latex(rf"\hat{{I}} \approx {res_1d['integral']:.10f}")
+                        st.latex(rf"\text{{Margen de Error }} (E) = {res_1d['margen_error']:.10f}")
+                        conf_latex = confianza.replace("%", r"\%")
+                        st.latex(rf"\text{{IC}}^{{{conf_latex}}} = \left[ {res_1d['ic_inferior']:.10f},\ {res_1d['ic_superior']:.10f} \right]")
                         
                     graf = res_1d.get("puntos_grafica")
                     if graf:
@@ -1334,13 +1332,11 @@ if algoritmo == "Monte Carlo":
                         m2.metric("Margen de Error (±)", f"{res_2d['margen_error']:.8f}")
                         m3.metric(f"IC al {confianza}", "Ver Tabla Abajo")
 
-                        import pandas as pd
-                        st.table(pd.DataFrame([{
-                            "Integral Estimada (Î)": f"{res_2d['integral']:.10f}",
-                            "Margen de Error": f"{res_2d['margen_error']:.10f}",
-                            f"Límite Inferior ({confianza})": f"{res_2d['ic_inferior']:.10f}",
-                            f"Límite Superior ({confianza})": f"{res_2d['ic_superior']:.10f}"
-                        }]))
+                        st.markdown("#### Resultado Detallado")
+                        st.latex(rf"\hat{{I}} \approx {res_2d['integral']:.10f}")
+                        st.latex(rf"\text{{Margen de Error }} (E) = {res_2d['margen_error']:.10f}")
+                        conf_latex = confianza.replace("%", r"\%")
+                        st.latex(rf"\text{{IC}}^{{{conf_latex}}} = \left[ {res_2d['ic_inferior']:.10f},\ {res_2d['ic_superior']:.10f} \right]")
 
                 except Exception as e:
                     st.error(f"Error procesando la integral iterativa: {e}")
