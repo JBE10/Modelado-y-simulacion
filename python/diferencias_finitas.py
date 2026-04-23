@@ -112,6 +112,25 @@ def polinomio_potencias_a_latex(coefs: list[float], var: str = "x", eps: float =
         return "0"
     return "".join(terms)
 
+def polinomio_potencias_a_python(coefs: list[float], var: str = "x", eps: float = 1e-9) -> str:
+    """Devuelve la expresión del polinomio en formato de Python para usar con pow/lambdify."""
+    terms: list[str] = []
+    for i in range(len(coefs) - 1, -1, -1):
+        c = coefs[i]
+        if abs(c) < eps:
+            continue
+        c_str = f"{c:.15g}" # plain float formatting
+        if i == 0:
+            terms.append(f"{c_str}")
+        elif i == 1:
+            terms.append(f"{c_str}*{var}")
+        else:
+            terms.append(f"{c_str}*{var}**{i}")
+    if not terms:
+        return "0.0"
+    return " + ".join(terms).replace("+ -", "- ")
+
+
 
 def interpolacion_newton_diferencias(
     xs: list[float],
@@ -171,6 +190,7 @@ def interpolacion_newton_diferencias(
 
     coefs = total
     latex_expandido = polinomio_potencias_a_latex(coefs)
+    python_poly = polinomio_potencias_a_python(coefs)
 
     # Forma Newton: y_0 + (Δy_0/1!) s + (Δ²y_0/2!) s(s-1) + … ,  s = (x-x_0)/h
     newton_terms: list[str] = []
@@ -216,6 +236,7 @@ def interpolacion_newton_diferencias(
         "deltas_y0": deltas,
         "coefs_potencias": coefs,
         "latex_polinomio": latex_expandido,
+        "python_polinomio": python_poly,
         "latex_newton_s": latex_newton,
         "grado": len(coefs) - 1,
         "modo": "progresivas",
@@ -268,6 +289,7 @@ def interpolacion_newton_divididas(xs: list[float], ys: list[float]) -> dict:
 
     coefs = total
     latex_expandido = polinomio_potencias_a_latex(coefs)
+    python_poly = polinomio_potencias_a_python(coefs)
 
     # Forma Newton en factores (x-x_i) con coeficientes numéricos
     def x_shift_latex(xi: float) -> str:
@@ -326,6 +348,7 @@ def interpolacion_newton_divididas(xs: list[float], ys: list[float]) -> dict:
         "deltas_y0": aks,
         "coefs_potencias": coefs,
         "latex_polinomio": latex_expandido,
+        "python_polinomio": python_poly,
         "latex_newton_divididas": latex_newton_factores,
         "latex_newton_s": "",
         "grado": len(coefs) - 1,

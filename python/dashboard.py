@@ -24,6 +24,8 @@ from montecarlo import (
     estimar_pi,
     integracion_1d_mc,
     integracion_2d_mc,
+    multi_run_1d,
+    simular_monty_hall,
 )
 
 MATH_NS = {
@@ -51,15 +53,25 @@ def make_fn(expr):
     }
     try:
         parsed_expr = sympy.sympify(expr, locals=MATH_SYMPY_NS)
-        f_lambdified = sympy.lambdify(sympy.Symbol('x'), parsed_expr, "math")
+        x_sym = sympy.Symbol('x')
+        f_lambdified = sympy.lambdify(x_sym, parsed_expr, "math")
         def f(x):
             try:
                 # Retornamos float puro
                 val = f_lambdified(x)
                 if isinstance(val, complex) and val.imag == 0:
                     val = val.real
-                return float(val)
+                v = float(val)
+                if not math.isfinite(v):
+                    raise ValueError
+                return v
             except Exception:
+                try:
+                    lim = sympy.limit(parsed_expr, x_sym, x)
+                    if lim.is_real and lim.is_finite:
+                        return float(lim.evalf())
+                except Exception:
+                    pass
                 return float('nan')
         return f
     except Exception as e:
@@ -381,6 +393,47 @@ def mostrar_resultados(res, f_fn, y_col, tooltip_cols, x_range, plot_cfg):
                 use_container_width=True,
             )
 
+    # ── Convergencia logarítmica y orden p ──
+    if "error" in df_h.columns and len(df_h) >= 3:
+        errores = df_h["error"].dropna().tolist()
+        errores_positivos = [e for e in errores if e > 0]
+        if len(errores_positivos) >= 3:
+            with st.container(border=True):
+                st.markdown("### Convergencia Logarítmica")
+                import numpy as np
+                df_log = pd.DataFrame({
+                    "iter": list(range(1, len(errores_positivos) + 1)),
+                    "log₁₀(error)": [math.log10(e) for e in errores_positivos]
+                })
+                chart_log = alt.Chart(df_log).mark_line(point=True, color="#7c3aed").encode(
+                    x=alt.X("iter:Q", title="Iteración"),
+                    y=alt.Y("log₁₀(error):Q", title="log₁₀(|error|)"),
+                    tooltip=["iter", "log₁₀(error)"]
+                ).properties(height=280, title="log₁₀(error) vs Iteración")
+                st.altair_chart(chart_log, use_container_width=True)
+
+                # Orden de convergencia estimado
+                p_vals = []
+                for k in range(2, len(errores_positivos)):
+                    e_k   = errores_positivos[k]
+                    e_k1  = errores_positivos[k-1]
+                    e_k2  = errores_positivos[k-2]
+                    if e_k1 > 0 and e_k2 > 0 and e_k > 0:
+                        denom = math.log(abs(e_k1 / e_k2))
+                        if abs(denom) > 1e-15:
+                            p = math.log(abs(e_k / e_k1)) / denom
+                            if math.isfinite(p) and 0 < p < 10:
+                                p_vals.append(p)
+                if p_vals:
+                    p_est = sum(p_vals[-3:]) / len(p_vals[-3:])  # promedio de los últimos vals
+                    st.latex(rf"p \approx \frac{{\ln|e_{{n+1}}/e_n|}}{{\ln|e_n/e_{{n-1}}|}} \approx {p_est:.4f}")
+                    if p_est < 1.3:
+                        st.caption("⚡ Convergencia **lineal** (p ≈ 1). Típico de Bisección y Punto Fijo.")
+                    elif p_est < 1.8:
+                        st.caption("⚡ Convergencia **superlineal** (p ≈ 1.62). Típico de la Secante.")
+                    else:
+                        st.caption("⚡ Convergencia **cuadrática** (p ≈ 2). Típico de Newton-Raphson.")
+
     with st.container(border=True):
         st.markdown("### Grafica de f(x)")
         iter_points = df_h[y_col].dropna().tolist() if y_col in df_h.columns else None
@@ -403,7 +456,7 @@ st.divider()
 
 with st.sidebar:
     st.header("Configuracion")
-    algoritmo = st.selectbox("Algoritmo", ["Biseccion", "Punto Fijo", "Newton-Raphson", "Secante", "Diferencias Finitas", "Integración Numérica", "Monte Carlo"])
+    algoritmo = st.selectbox("Algoritmo", ["Biseccion", "Punto Fijo", "Newton-Raphson", "Secante", "Comparar Raíces", "Diferencias Finitas", "Integración Numérica", "Monte Carlo"])
     st.divider()
     st.markdown("### Vista de f(x)")
     n_samples = st.slider("Muestras", min_value=200, max_value=2000, step=100, value=900)
@@ -558,7 +611,8 @@ if algoritmo == "Newton-Raphson":
                 c1, c2 = st.columns(2)
                 with c1:
                     expr_f = st.text_input("f(x)", "x**3 - x - 2", key="f_nr")
-                    expr_df = st.text_input("f'(x)", "3*x**2 - 1", key="df_nr")
+                    auto_deriv = st.checkbox("Calcular f'(x) automáticamente con sympy", value=False, key="auto_df")
+                    expr_df = st.text_input("f'(x) manual (ignorado si auto está activo)", "3*x**2 - 1", key="df_nr")
                     x0 = st.number_input("x0", value=1.5, format="%.10f", key="x0_nr")
                 with c2:
                     tol = st.number_input("Tolerancia", value=1e-7, min_value=1e-15, format="%.15f", key="tol_nr")
@@ -566,12 +620,30 @@ if algoritmo == "Newton-Raphson":
                 run = st.form_submit_button("Calcular", type="primary")
 
         if run:
-            if not expr_f.strip() or not expr_df.strip():
-                st.error("Debes ingresar f(x) y f'(x).")
+            if not expr_f.strip():
+                st.error("Debes ingresar f(x).")
+            elif not auto_deriv and not expr_df.strip():
+                st.error("Debes ingresar f'(x) o activar el cálculo automático.")
             else:
                 try:
                     f_fn = make_fn(expr_f)
-                    df_fn = make_fn(expr_df)
+                    if auto_deriv:
+                        import sympy
+                        x_sym = sympy.Symbol('x')
+                        MATH_SYMPY_NS = {
+                            "pi": sympy.pi, "e": sympy.E, "E": sympy.E,
+                            "sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
+                            "exp": sympy.exp, "log": sympy.log, "ln": sympy.log,
+                            "sqrt": sympy.sqrt, "abs": sympy.Abs,
+                            "cbrt": lambda z: sympy.root(z, 3),
+                        }
+                        parsed = sympy.sympify(norm(expr_f).replace("ln(", "log("), locals=MATH_SYMPY_NS)
+                        derivada_sym = sympy.diff(parsed, x_sym)
+                        st.info(f"f'(x) calculada automáticamente: **{derivada_sym}**")
+                        st.latex(rf"f'(x) = {sympy.latex(derivada_sym)}")
+                        df_fn = sympy.lambdify(x_sym, derivada_sym, "math")
+                    else:
+                        df_fn = make_fn(expr_df)
                     res = newton_raphson(f_fn, df_fn, x0, tol=tol, max_iter=int(mi))
                     mostrar_resultados(
                         res,
@@ -624,6 +696,115 @@ if algoritmo == "Secante":
                     st.error(str(e))
     with side_col:
         _formulas_panel("Secante")
+
+
+# ── COMPARAR RAÍCES ───────────────────────────────────────────────────────
+if algoritmo == "Comparar Raíces":
+    main_col, side_col = st.columns([2.3, 1.0], gap="large")
+    with main_col:
+        with st.container(border=True):
+            st.subheader("Comparador de Métodos de Raíces")
+            st.caption("Ejecuta Bisección, Newton-Raphson y Secante sobre la misma f(x) y compara convergencia.")
+            with st.form("comparar_raices"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    expr_f = st.text_input("f(x)", "x**3 - x - 2", key="cmp_f")
+                    expr_df = st.text_input("f'(x) (para Newton, deja vacío para auto)", "", key="cmp_df")
+                    a_cmp = st.number_input("a (para Bisección)", value=1.0, format="%.10f", key="cmp_a")
+                    b_cmp = st.number_input("b (para Bisección)", value=2.0, format="%.10f", key="cmp_b")
+                with c2:
+                    x0_cmp = st.number_input("x0 (para Newton/Secante)", value=1.0, format="%.10f", key="cmp_x0")
+                    x1_cmp = st.number_input("x1 (para Secante)", value=2.0, format="%.10f", key="cmp_x1")
+                    tol_cmp = st.number_input("Tolerancia", value=1e-10, min_value=1e-15, format="%.15f", key="cmp_tol")
+                    mi_cmp = st.number_input("Max iter", value=100, min_value=1, step=1, key="cmp_mi")
+                run_cmp = st.form_submit_button("Comparar", type="primary")
+
+        if run_cmp and expr_f.strip():
+            try:
+                f_fn = make_fn(expr_f)
+                resultados_cmp = {}
+
+                # Bisección
+                try:
+                    res_bis = biseccion(f_fn, a_cmp, b_cmp, tol=tol_cmp, max_iter=int(mi_cmp))
+                    resultados_cmp["Bisección"] = res_bis
+                except Exception as e:
+                    st.warning(f"Bisección falló: {e}")
+
+                # Newton-Raphson
+                try:
+                    if expr_df.strip():
+                        df_fn = make_fn(expr_df)
+                    else:
+                        import sympy
+                        x_sym = sympy.Symbol('x')
+                        MATH_SYMPY_NS = {
+                            "pi": sympy.pi, "e": sympy.E, "E": sympy.E,
+                            "sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
+                            "exp": sympy.exp, "log": sympy.log, "ln": sympy.log,
+                            "sqrt": sympy.sqrt, "abs": sympy.Abs,
+                        }
+                        parsed = sympy.sympify(norm(expr_f).replace("ln(", "log("), locals=MATH_SYMPY_NS)
+                        derivada_sym = sympy.diff(parsed, x_sym)
+                        df_fn = sympy.lambdify(x_sym, derivada_sym, "math")
+                    res_nr = newton_raphson(f_fn, df_fn, x0_cmp, tol=tol_cmp, max_iter=int(mi_cmp))
+                    resultados_cmp["Newton-Raphson"] = res_nr
+                except Exception as e:
+                    st.warning(f"Newton-Raphson falló: {e}")
+
+                # Secante
+                try:
+                    res_sec = secante(f_fn, x0_cmp, x1_cmp, tol=tol_cmp, max_iter=int(mi_cmp))
+                    resultados_cmp["Secante"] = res_sec
+                except Exception as e:
+                    st.warning(f"Secante falló: {e}")
+
+                if resultados_cmp:
+                    # Tabla comparativa
+                    with st.container(border=True):
+                        st.markdown("### Tabla Comparativa")
+                        tabla_rows = []
+                        for nombre, r in resultados_cmp.items():
+                            err_final = abs(f_fn(r["raiz"])) if r["raiz"] is not None else None
+                            tabla_rows.append({
+                                "Método": nombre,
+                                "Raíz": f"{r['raiz']:.12f}",
+                                "Iteraciones": r["iteraciones"],
+                                "|f(raíz)|": f"{err_final:.4e}" if err_final is not None else "N/A",
+                                "Convergió": "✅" if r["convergio"] else "❌",
+                            })
+                        st.dataframe(pd.DataFrame(tabla_rows), hide_index=True, use_container_width=True)
+
+                    # Gráfico de comparación de convergencia
+                    with st.container(border=True):
+                        st.markdown("### Convergencia Comparada (log₁₀ error)")
+                        all_series = []
+                        for nombre, r in resultados_cmp.items():
+                            for row in r["historial"]:
+                                if "error" in row and row["error"] and row["error"] > 0:
+                                    all_series.append({
+                                        "iter": row["iter"],
+                                        "log₁₀(error)": math.log10(row["error"]),
+                                        "Método": nombre
+                                    })
+                        if all_series:
+                            df_cmp = pd.DataFrame(all_series)
+                            chart_cmp = alt.Chart(df_cmp).mark_line(point=True).encode(
+                                x=alt.X("iter:Q", title="Iteración"),
+                                y=alt.Y("log₁₀(error):Q", title="log₁₀(|error|)"),
+                                color=alt.Color("Método:N"),
+                                tooltip=["iter", "Método", "log₁₀(error)"]
+                            ).properties(height=350, title="Velocidad de Convergencia por Método")
+                            st.altair_chart(chart_cmp, use_container_width=True)
+                            st.caption("La pendiente más empinada indica convergencia más rápida.")
+
+            except Exception as e:
+                st.error(str(e))
+    with side_col:
+        st.markdown("### Comparador")
+        st.caption("Ejecuta los 3 métodos principales sobre la misma función y compara lado a lado la velocidad de convergencia y precisión final.")
+        st.latex(r"p \approx \frac{\ln|e_{n+1}/e_n|}{\ln|e_n/e_{n-1}|}")
+        st.caption("p≈1: Bisección | p≈1.62: Secante | p≈2: Newton")
 
 
 # ── DIFERENCIAS FINITAS ────────────────────────────────────────────────────
@@ -936,20 +1117,31 @@ if algoritmo == "Diferencias Finitas":
                         height=140,
                         key="newton_xy",
                     )
+                    x_eval_str = st.text_input("Evaluar P(x) en x = (opcional)", "", help="Deja en blanco si sólo quieres calcular el polinomio.")
                     run_n = st.form_submit_button("Calcular polinomio", type="primary")
 
             if run_n:
                 try:
                     lineas = [l.strip() for l in puntos_n.replace(";", "\n").splitlines() if l.strip()]
                     xs_n, ys_n = [], []
+                    incognitas = []
                     for linea in lineas:
                         partes = linea.split(",")
                         if len(partes) != 2:
-                            raise ValueError(f"Formato incorrecto en línea: '{linea}'")
-                        xs_n.append(parse_number_cell(partes[0]))
-                        ys_n.append(parse_number_cell(partes[1]))
+                            raise ValueError(f"Formato incorrecto en línea: '{linea}'. Usa 'x, y'.")
+                        
+                        xv = parse_number_cell(partes[0])
+                        y_str = partes[1].strip()
+                        try:
+                            yv = parse_number_cell(y_str)
+                            xs_n.append(xv)
+                            ys_n.append(yv)
+                        except ValueError:
+                            # Considerarlo una incógnita (e.g. 'k')
+                            incognitas.append((xv, y_str))
+
                     if len(xs_n) < 2:
-                        raise ValueError("Se necesitan al menos dos nodos para interpolar.")
+                        raise ValueError(f"Se necesitan al menos dos nodos numéricos para interpolar (tienes {len(xs_n)}).")
 
                     res_n = interpolacion_newton_divididas(xs_n, ys_n)
 
@@ -970,17 +1162,35 @@ if algoritmo == "Diferencias Finitas":
                         st.latex(r"P(x) = " + res_n["latex_newton_divididas"])
                         st.markdown("### Polinomio en x (expandido, potencias)")
                         st.latex(r"P(x) = " + res_n["latex_polinomio"])
+                        st.markdown("### Polinomio en Python (para copiar a Función)")
                         st.text_area(
-                            "LaTeX para copiar (solo el lado derecho)",
-                            value=res_n["latex_polinomio"],
+                            "Expresión en Python",
+                            value=res_n.get("python_polinomio", ""),
                             height=68,
-                            key="latex_copy_newton",
+                            key="python_copy_newton",
                         )
 
                     coefs = res_n["coefs_potencias"]
 
                     def _eval_poly(xv: float) -> float:
                         return sum(coefs[i] * (xv ** i) for i in range(len(coefs)))
+
+                    # Si hubo incógnitas (e.g. 'k' en un nodo x), las calculamos automáticamente
+                    pts_incognitas_grafica = []
+                    if incognitas:
+                        for idx_inc, (xv, nombre) in enumerate(incognitas):
+                            val_pred = _eval_poly(xv)
+                            st.success(f"**Incógnita resuelta:** Al evaluar $P({xv})$, obtenemos que ${nombre} \\approx {val_pred:.15g}$")
+                            pts_incognitas_grafica.append({"x": xv, "y": val_pred, "tipo": f"Incógnita ({nombre})"})
+
+                    # Evaluar P(x) manual
+                    if x_eval_str.strip():
+                        try:
+                            val_x_eval = parse_number_cell(x_eval_str)
+                            val_p = _eval_poly(val_x_eval)
+                            st.info(f"**Evaluación manual:** $P({val_x_eval}) \\approx {val_p:.15g}$")
+                        except Exception as e:
+                            st.warning(f"No se pudo evaluar x = {x_eval_str}: {e}")
 
                     with st.container(border=True):
                         st.markdown("### Verificación en los nodos")
@@ -1006,16 +1216,25 @@ if algoritmo == "Diferencias Finitas":
                         xs_plot.append(xv)
                         ys_plot.append(_eval_poly(xv))
                     df_curve = pd.DataFrame({"x": xs_plot, "y": ys_plot})
-                    df_pts = pd.DataFrame({"x": xs_n, "y": ys_n})
+                    
+                    df_pts_conocidos = pd.DataFrame([{"x": x, "y": y, "tipo": "Dato conocido"} for x, y in zip(xs_n, ys_n)])
+                    df_pts_totales = pd.concat([df_pts_conocidos, pd.DataFrame(pts_incognitas_grafica)]) if pts_incognitas_grafica else df_pts_conocidos
+
                     curva_p = (
                         alt.Chart(df_curve)
                         .mark_line(color="#7c3aed", strokeWidth=2)
                         .encode(x="x:Q", y="y:Q")
                     )
+                    
                     puntos_p = (
-                        alt.Chart(df_pts)
-                        .mark_point(size=120, color="#f97316", filled=True)
-                        .encode(x="x:Q", y="y:Q", tooltip=["x", "y"])
+                        alt.Chart(df_pts_totales)
+                        .mark_point(size=150, filled=True)
+                        .encode(
+                            x="x:Q", 
+                            y="y:Q", 
+                            color=alt.Color("tipo:N", scale=alt.Scale(domain=["Dato conocido", "Incógnita (k)"], range=["#f97316", "#10b981"])),
+                            tooltip=["x", "y", "tipo"]
+                        )
                     )
                     with st.container(border=True):
                         st.markdown("### P(x) y nodos")
@@ -1207,7 +1426,7 @@ if algoritmo == "Integración Numérica":
 if algoritmo == "Monte Carlo":
     main_col, side_col = st.columns([2.3, 1.0], gap="large")
     with main_col:
-        modo = st.radio("Modo de Simulación", ["Estimación de π", "Integración 1D", "Integración 2D"], horizontal=True)
+        modo = st.radio("Modo de Simulación", ["Estimación de π", "Integración 1D", "Integración 2D", "Convergencia Progresiva", "Histograma CLT", "Comparar 2 Integrales", "Monty Hall (Juego)"], horizontal=True)
 
         if modo == "Estimación de π":
             with st.container(border=True):
@@ -1216,7 +1435,8 @@ if algoritmo == "Monte Carlo":
                 with st.form("mc_pi"):
                     c1, c2 = st.columns(2)
                     with c1:
-                        n_puntos = st.number_input("Número de Puntos (N)", value=10000, step=1000)
+                        n_puntos = st.number_input("Número de Puntos (N)", value=100000, step=10000)
+                        animar_pi = st.checkbox("Animar caída de puntos", value=False)
                     with c2:
                         semilla = st.number_input("Semilla Aleatoria (opcional)", value=42, min_value=0, step=1)
                         usar_semilla = st.checkbox("Fijar semilla para reproducibilidad", value=True)
@@ -1231,17 +1451,49 @@ if algoritmo == "Monte Carlo":
                     cols[1].metric("Puntos dentro (Acertados)", f"{res_pi['puntos_dentro']}")
                     cols[2].metric("Aproximación de π", f"{res_pi['pi_estimado']:.8f}")
 
+                with st.container(border=True):
+                    st.markdown("#### Resultado Detallado")
+                    import math as _m
+                    st.latex(rf"\pi \approx 4 \times \frac{{{res_pi['puntos_dentro']}}}{{{res_pi['num_puntos']}}} = {res_pi['pi_estimado']:.10f}")
+                    st.latex(rf"\left|\,\pi_{{\text{{estimado}}}} - \pi_{{\text{{real}}}}\,\right| = {res_pi['error_vs_pi']:.10f}")
+                    st.latex(rf"\text{{Error Estándar}} = {res_pi['error_estandar']:.10f}")
+                    st.latex(rf"\text{{IC}}^{{95\%}} = \left[{res_pi['pi_estimado'] - 1.96*res_pi['error_estandar']:.10f},\ {res_pi['pi_estimado'] + 1.96*res_pi['error_estandar']:.10f}\right]")
+
                 pts = res_pi["puntos_grafica"]
                 if pts:
                     import pandas as pd
+                    import time
                     st.caption(f"Mostrando los primeros {len(pts)} puntos generados:")
                     df = pd.DataFrame(pts)
-                    chart = alt.Chart(df).mark_circle(size=15).encode(
-                        x=alt.X('x:Q', scale=alt.Scale(domain=[-1, 1])),
-                        y=alt.Y('y:Q', scale=alt.Scale(domain=[-1, 1])),
-                        color=alt.Color('estado:N', scale=alt.Scale(domain=["Dentro", "Fuera"], range=["#22c55e", "#ef4444"]))
-                    ).properties(height=400, width=400).interactive()
-                    st.altair_chart(chart, use_container_width=True)
+                    
+                    if animar_pi:
+                        placeholder = st.empty()
+                        num_frames = 20
+                        chunk_size = max(1, len(pts) // num_frames)
+                        for i in range(1, num_frames + 1):
+                            idx = i * chunk_size if i < num_frames else len(pts)
+                            df_chunk = df.iloc[:idx]
+                            chart = alt.Chart(df_chunk).mark_circle(size=15).encode(
+                                x=alt.X('x:Q', scale=alt.Scale(domain=[-1, 1])),
+                                y=alt.Y('y:Q', scale=alt.Scale(domain=[-1, 1])),
+                                color=alt.Color('estado:N', scale=alt.Scale(domain=["Dentro", "Fuera"], range=["#22c55e", "#ef4444"]))
+                            ).properties(height=400, width=400)
+                            placeholder.altair_chart(chart, use_container_width=True)
+                            time.sleep(0.1)
+                        # Volver interactivo al terminar
+                        chart_final = alt.Chart(df).mark_circle(size=15).encode(
+                            x=alt.X('x:Q', scale=alt.Scale(domain=[-1, 1])),
+                            y=alt.Y('y:Q', scale=alt.Scale(domain=[-1, 1])),
+                            color=alt.Color('estado:N', scale=alt.Scale(domain=["Dentro", "Fuera"], range=["#22c55e", "#ef4444"]))
+                        ).properties(height=400, width=400).interactive()
+                        placeholder.altair_chart(chart_final, use_container_width=True)
+                    else:
+                        chart = alt.Chart(df).mark_circle(size=15).encode(
+                            x=alt.X('x:Q', scale=alt.Scale(domain=[-1, 1])),
+                            y=alt.Y('y:Q', scale=alt.Scale(domain=[-1, 1])),
+                            color=alt.Color('estado:N', scale=alt.Scale(domain=["Dentro", "Fuera"], range=["#22c55e", "#ef4444"]))
+                        ).properties(height=400, width=400).interactive()
+                        st.altair_chart(chart, use_container_width=True)
 
         elif modo == "Integración 1D":
             with st.container(border=True):
@@ -1254,8 +1506,9 @@ if algoritmo == "Monte Carlo":
                         a_str = st.text_input("Límite inferior a", "0")
                         b_str = st.text_input("Límite superior b", "2")
                     with c2:
-                        n_puntos = st.number_input("Número de Evaluaciones (N)", value=10000, step=1000)
+                        n_puntos = st.number_input("Número de Evaluaciones (N)", value=100000, step=10000)
                         confianza = st.selectbox("Intervalo de Confianza", ["90%", "95%", "99%"], index=1)
+                        animar_1d = st.checkbox("Animar caída de puntos", value=False)
                         semilla = st.number_input("Semilla Aleatoria", value=42, min_value=0, step=1)
                         usar_semilla = st.checkbox("Fijar semilla", value=True)
                     run_1d = st.form_submit_button("Integrar", type="primary")
@@ -1277,20 +1530,43 @@ if algoritmo == "Monte Carlo":
                         m3.metric(f"IC al {confianza}", "Ver Tabla Abajo")
                         
                         st.markdown("#### Resultado Detallado")
-                        st.latex(rf"\hat{{I}} \approx {res_1d['integral']:.10f}")
-                        st.latex(rf"\text{{Margen de Error }} (E) = {res_1d['margen_error']:.10f}")
+                        st.latex(rf"\hat{{I}} = (b-a) \cdot \bar{{f}} = {res_1d['integral']:.10f}")
+                        st.latex(rf"\sigma = {res_1d['sigma']:.10f}")
+                        st.latex(rf"\text{{Error Estándar}} = \frac{{\sigma}}{{\sqrt{{N}}}} = {res_1d['error_estandar']:.10f}")
+                        st.latex(rf"\text{{Margen de Error}} = Z \cdot EE \cdot (b-a) = {res_1d['margen_error']:.10f}")
                         conf_latex = confianza.replace("%", r"\%")
                         st.latex(rf"\text{{IC}}^{{{conf_latex}}} = \left[ {res_1d['ic_inferior']:.10f},\ {res_1d['ic_superior']:.10f} \right]")
                         
                     graf = res_1d.get("puntos_grafica")
                     if graf:
-                        st.caption("Frecuencias y distribución de muestras evaluadas en f(x_i):")
+                        import time
+                        st.caption(f"Mostrando frecuencias y distribución de muestras evaluadas en f(x_i) (max {len(graf)}):")
                         df = pd.DataFrame(graf)
-                        chart = alt.Chart(df).mark_circle(opacity=0.3, size=20, color="#3b82f6").encode(
-                            x=alt.X('x:Q', scale=alt.Scale(domain=[a,b])),
-                            y=alt.Y('y:Q', title="f(x)")
-                        ).properties(height=350).interactive()
-                        st.altair_chart(chart, use_container_width=True)
+                        
+                        if animar_1d:
+                            placeholder = st.empty()
+                            num_frames = 20
+                            chunk_size = max(1, len(graf) // num_frames)
+                            for i in range(1, num_frames + 1):
+                                idx = i * chunk_size if i < num_frames else len(graf)
+                                df_chunk = df.iloc[:idx]
+                                chart = alt.Chart(df_chunk).mark_circle(opacity=0.3, size=20, color="#3b82f6").encode(
+                                    x=alt.X('x:Q', scale=alt.Scale(domain=[a,b])),
+                                    y=alt.Y('y:Q', title="f(x)")
+                                ).properties(height=350)
+                                placeholder.altair_chart(chart, use_container_width=True)
+                                time.sleep(0.1)
+                            chart_final = alt.Chart(df).mark_circle(opacity=0.3, size=20, color="#3b82f6").encode(
+                                x=alt.X('x:Q', scale=alt.Scale(domain=[a,b])),
+                                y=alt.Y('y:Q', title="f(x)")
+                            ).properties(height=350).interactive()
+                            placeholder.altair_chart(chart_final, use_container_width=True)
+                        else:
+                            chart = alt.Chart(df).mark_circle(opacity=0.3, size=20, color="#3b82f6").encode(
+                                x=alt.X('x:Q', scale=alt.Scale(domain=[a,b])),
+                                y=alt.Y('y:Q', title="f(x)")
+                            ).properties(height=350).interactive()
+                            st.altair_chart(chart, use_container_width=True)
 
                 except Exception as e:
                     st.error(f"Error procesando: {e}")
@@ -1308,7 +1584,7 @@ if algoritmo == "Monte Carlo":
                     with c2:
                         cy_str = st.text_input("Límite y inferior (c)", "0")
                         dy_str = st.text_input("Límite y superior (d)", "pi/2")
-                        n_puntos = st.number_input("Número de Evaluaciones (N)", value=25000, step=5000)
+                        n_puntos = st.number_input("Número de Evaluaciones (N)", value=100000, step=10000)
                         confianza = st.selectbox("Intervalo de Confianza", ["90%", "95%", "99%"], index=2)
                         semilla = st.number_input("Semilla Aleatoria", value=42, min_value=0, step=1)
                         usar_semilla = st.checkbox("Fijar semilla", value=True)
@@ -1333,13 +1609,358 @@ if algoritmo == "Monte Carlo":
                         m3.metric(f"IC al {confianza}", "Ver Tabla Abajo")
 
                         st.markdown("#### Resultado Detallado")
-                        st.latex(rf"\hat{{I}} \approx {res_2d['integral']:.10f}")
-                        st.latex(rf"\text{{Margen de Error }} (E) = {res_2d['margen_error']:.10f}")
+                        st.latex(rf"\hat{{I}} = \text{{Área}} \cdot \bar{{f}} = {res_2d['integral']:.10f}")
+                        st.latex(rf"\sigma = {res_2d['sigma']:.10f}")
+                        st.latex(rf"\text{{Error Estándar}} = \frac{{\sigma}}{{\sqrt{{N}}}} = {res_2d['error_estandar']:.10f}")
+                        st.latex(rf"\text{{Margen de Error}} = Z \cdot EE \cdot \text{{Área}} = {res_2d['margen_error']:.10f}")
                         conf_latex = confianza.replace("%", r"\%")
                         st.latex(rf"\text{{IC}}^{{{conf_latex}}} = \left[ {res_2d['ic_inferior']:.10f},\ {res_2d['ic_superior']:.10f} \right]")
-
                 except Exception as e:
                     st.error(f"Error procesando la integral iterativa: {e}")
+
+        elif modo == "Convergencia Progresiva":
+            with st.container(border=True):
+                st.subheader("Convergencia Progresiva de Monte Carlo")
+                st.caption("Observá cómo la estimación se estabiliza conforme N crece. La banda del IC se achica.")
+                with st.form("mc_conv"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        expr_f_conv = st.text_input("f(x)", "x**2", key="mc_conv_f")
+                        a_conv = st.text_input("Límite inferior a", "0", key="mc_conv_a")
+                        b_conv = st.text_input("Límite superior b", "2", key="mc_conv_b")
+                    with c2:
+                        n_conv = st.number_input("Número de Evaluaciones (N)", value=100000, step=10000, key="mc_conv_n")
+                        conf_conv = st.selectbox("IC", ["90%", "95%", "99%"], index=1, key="mc_conv_ic")
+                        semilla_conv = st.number_input("Semilla", value=42, min_value=0, step=1, key="mc_conv_s")
+                        usar_semilla_conv = st.checkbox("Fijar semilla", value=True, key="mc_conv_fix")
+                    run_conv = st.form_submit_button("Graficar Convergencia", type="primary")
+
+            if run_conv:
+                try:
+                    f_fn = make_fn(expr_f_conv)
+                    a = parse_number_cell(a_conv)
+                    b = parse_number_cell(b_conv)
+                    seed = int(semilla_conv) if usar_semilla_conv else None
+                    res_conv = integracion_1d_mc(f_fn, a, b, int(n_conv), conf_conv, seed)
+                    snaps = res_conv.get("snapshots", [])
+                    if snaps:
+                        with st.container(border=True):
+                            st.markdown("### Evolución de la Estimación")
+                            df_snap = pd.DataFrame(snaps)
+                            linea = alt.Chart(df_snap).mark_line(color="#2563eb", strokeWidth=2).encode(
+                                x=alt.X("n:Q", title="Número de muestras (N)"),
+                                y=alt.Y("integral:Q", title="Integral Estimada")
+                            )
+                            banda = alt.Chart(df_snap).mark_area(opacity=0.2, color="#3b82f6").encode(
+                                x="n:Q",
+                                y="ic_inf:Q",
+                                y2="ic_sup:Q"
+                            )
+                            valor_final = alt.Chart(pd.DataFrame([{"y": res_conv["integral"]}])).mark_rule(
+                                color="#dc2626", strokeDash=[5, 3], strokeWidth=2
+                            ).encode(y="y:Q")
+                            chart = (banda + linea + valor_final).properties(
+                                height=400, title="Convergencia Progresiva con Banda de IC"
+                            ).interactive()
+                            st.altair_chart(chart, use_container_width=True)
+                            st.caption("Línea azul: estimación parcial. Banda: IC progresivo. Línea roja: valor final.")
+                            st.latex(rf"\hat{{I}}_{{\text{{final}}}} = {res_conv['integral']:.10f}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+        elif modo == "Histograma CLT":
+            with st.container(border=True):
+                st.subheader("Histograma: Teorema Central del Límite")
+                st.caption("Ejecuta K simulaciones independientes y grafica la distribución de resultados. Demuestra visualmente el TCL.")
+                with st.form("mc_clt"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        expr_f_clt = st.text_input("f(x)", "x**2", key="mc_clt_f")
+                        a_clt = st.text_input("a", "0", key="mc_clt_a")
+                        b_clt = st.text_input("b", "2", key="mc_clt_b")
+                    with c2:
+                        n_clt = st.number_input("N por corrida", value=5000, step=1000, key="mc_clt_n")
+                        k_clt = st.number_input("Número de corridas (K)", value=200, step=50, key="mc_clt_k")
+                    run_clt = st.form_submit_button("Simular K corridas", type="primary")
+
+            if run_clt:
+                try:
+                    f_fn = make_fn(expr_f_clt)
+                    a = parse_number_cell(a_clt)
+                    b = parse_number_cell(b_clt)
+                    with st.spinner(f"Ejecutando {k_clt} simulaciones MC..."):
+                        resultados = multi_run_1d(f_fn, a, b, int(n_clt), int(k_clt))
+                    with st.container(border=True):
+                        st.markdown("### Distribución de Resultados")
+                        import numpy as np
+                        media = np.mean(resultados)
+                        desv = np.std(resultados, ddof=1)
+                        st.latex(rf"\bar{{I}} = {media:.10f}")
+                        st.latex(rf"s = {desv:.10f}")
+                        st.latex(rf"\text{{K corridas}} = {int(k_clt)}")
+
+                        df_hist = pd.DataFrame({"Integral Estimada": resultados})
+                        hist_chart = alt.Chart(df_hist).mark_bar(opacity=0.7, color="#6366f1").encode(
+                            alt.X("Integral Estimada:Q", bin=alt.Bin(maxbins=40), title="Valor de la Integral"),
+                            y=alt.Y("count()", title="Frecuencia")
+                        ).properties(height=350, title=f"Histograma de {int(k_clt)} corridas MC (N={int(n_clt)} c/u)")
+
+                        media_rule = alt.Chart(pd.DataFrame([{"x": media}])).mark_rule(
+                            color="#dc2626", strokeWidth=2, strokeDash=[5,3]
+                        ).encode(x="x:Q")
+
+                        st.altair_chart(hist_chart + media_rule, use_container_width=True)
+                        st.caption("La distribución se aproxima a una Normal (Teorema Central del Límite). Línea roja: media.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+        elif modo == "Comparar 2 Integrales":
+            with st.container(border=True):
+                st.subheader("Comparar dos Integrales con Monte Carlo")
+                st.caption("Evalúa dos integrales distintas con los mismos parámetros y compara sus resultados e intervalos de confianza lado a lado.")
+                with st.form("mc_cmp2"):
+                    st.markdown("##### Integral A")
+                    ca1, ca2, ca3 = st.columns(3)
+                    with ca1:
+                        expr_a = st.text_input("f(x) — Integral A", "x**2", key="mc_a_f")
+                    with ca2:
+                        a_a = st.text_input("a (A)", "0", key="mc_a_a")
+                        b_a = st.text_input("b (A)", "2", key="mc_a_b")
+                    with ca3:
+                        label_a = st.text_input("Etiqueta A", "Integral A", key="mc_a_label")
+
+                    st.markdown("##### Integral B")
+                    cb1, cb2, cb3 = st.columns(3)
+                    with cb1:
+                        expr_b = st.text_input("f(x) — Integral B", "sin(x)", key="mc_b_f")
+                    with cb2:
+                        a_b = st.text_input("a (B)", "0", key="mc_b_a")
+                        b_b = st.text_input("b (B)", "pi", key="mc_b_b")
+                    with cb3:
+                        label_b = st.text_input("Etiqueta B", "Integral B", key="mc_b_label")
+
+                    st.markdown("##### Parámetros comunes")
+                    cp1, cp2, cp3 = st.columns(3)
+                    with cp1:
+                        n_cmp2 = st.number_input("N evaluaciones", value=100000, step=10000, key="mc_cmp2_n")
+                    with cp2:
+                        conf_cmp2 = st.selectbox("IC", ["90%", "95%", "99%"], index=1, key="mc_cmp2_ic")
+                    with cp3:
+                        semilla_cmp2 = st.number_input("Semilla", value=42, min_value=0, step=1, key="mc_cmp2_s")
+                        usar_semilla_cmp2 = st.checkbox("Fijar semilla", value=True, key="mc_cmp2_fix")
+                    run_cmp2 = st.form_submit_button("Comparar Integrales", type="primary")
+
+            if run_cmp2:
+                try:
+                    seed = int(semilla_cmp2) if usar_semilla_cmp2 else None
+                    fa = make_fn(expr_a)
+                    fb = make_fn(expr_b)
+                    aa = parse_number_cell(a_a); ba = parse_number_cell(b_a)
+                    ab = parse_number_cell(a_b); bb = parse_number_cell(b_b)
+
+                    res_a = integracion_1d_mc(fa, aa, ba, int(n_cmp2), conf_cmp2, seed)
+                    res_b = integracion_1d_mc(fb, ab, bb, int(n_cmp2), conf_cmp2, seed)
+
+                    with st.container(border=True):
+                        st.markdown("### Tabla Comparativa")
+                        st.table(pd.DataFrame([
+                            {
+                                "Integral": label_a,
+                                "f(x)": expr_a,
+                                "[a, b]": f"[{aa}, {ba}]",
+                                "\u00ce": f"{res_a['integral']:.10f}",
+                                "Margen \u00b1": f"{res_a['margen_error']:.10f}",
+                                f"IC inf ({conf_cmp2})": f"{res_a['ic_inferior']:.10f}",
+                                f"IC sup ({conf_cmp2})": f"{res_a['ic_superior']:.10f}",
+                            },
+                            {
+                                "Integral": label_b,
+                                "f(x)": expr_b,
+                                "[a, b]": f"[{ab}, {bb}]",
+                                "\u00ce": f"{res_b['integral']:.10f}",
+                                "Margen \u00b1": f"{res_b['margen_error']:.10f}",
+                                f"IC inf ({conf_cmp2})": f"{res_b['ic_inferior']:.10f}",
+                                f"IC sup ({conf_cmp2})": f"{res_b['ic_superior']:.10f}",
+                            },
+                        ]))
+
+                    with st.container(border=True):
+                        st.markdown("### Resultados en LaTeX")
+                        col_la, col_lb = st.columns(2)
+                        with col_la:
+                            st.markdown(f"**{label_a}**")
+                            st.latex(rf"\hat{{I}}_A = {res_a['integral']:.10f}")
+                            st.latex(rf"\sigma_A = {res_a['sigma']:.10f}")
+                            conf_l = conf_cmp2.replace('%', r'\%')
+                            st.latex(rf"IC_A^{{{conf_l}}} = \left[{res_a['ic_inferior']:.10f},\ {res_a['ic_superior']:.10f}\right]")
+                        with col_lb:
+                            st.markdown(f"**{label_b}**")
+                            st.latex(rf"\hat{{I}}_B = {res_b['integral']:.10f}")
+                            st.latex(rf"\sigma_B = {res_b['sigma']:.10f}")
+                            st.latex(rf"IC_B^{{{conf_l}}} = \left[{res_b['ic_inferior']:.10f},\ {res_b['ic_superior']:.10f}\right]")
+
+                    # Grafico de convergencia comparado
+                    snaps_a = res_a.get("snapshots", [])
+                    snaps_b = res_b.get("snapshots", [])
+                    if snaps_a and snaps_b:
+                        with st.container(border=True):
+                            st.markdown("### Convergencia Comparada")
+                            df_a = pd.DataFrame(snaps_a); df_a["serie"] = label_a
+                            df_b = pd.DataFrame(snaps_b); df_b["serie"] = label_b
+                            df_conv = pd.concat([df_a, df_b], ignore_index=True)
+                            chart_conv = alt.Chart(df_conv).mark_line(strokeWidth=2).encode(
+                                x=alt.X("n:Q", title="N muestras"),
+                                y=alt.Y("integral:Q", title="Integral Estimada"),
+                                color=alt.Color("serie:N"),
+                                tooltip=["n", "serie", "integral"]
+                            ).properties(height=380, title="Convergencia progresiva comparada").interactive()
+                            st.altair_chart(chart_conv, use_container_width=True)
+
+                    # ── Grafico de las dos funciones + puntos de muestreo ──
+                    with st.container(border=True):
+                        st.markdown("### Visualización de f(x) y Puntos de Muestreo")
+                        st.caption("Curva continua de cada función junto con los puntos aleatoriamente evaluados por Monte Carlo.")
+
+                        import numpy as np
+
+                        # Evaluar curvas continuas
+                        def _curva(f, a_v, b_v, etiqueta, color):
+                            xs = np.linspace(a_v, b_v, 500)
+                            rows = []
+                            for xv in xs:
+                                try:
+                                    y = float(f(xv))
+                                    if math.isfinite(y):
+                                        rows.append({"x": xv, "y": y, "serie": etiqueta})
+                                except Exception:
+                                    pass
+                            df_c = pd.DataFrame(rows)
+                            return alt.Chart(df_c).mark_line(strokeWidth=2.5, color=color).encode(
+                                x=alt.X("x:Q", title="x"),
+                                y=alt.Y("y:Q", title="f(x)"),
+                                tooltip=["x", "y"]
+                            )
+
+                        def _puntos(pts_lista, etiqueta, color):
+                            df_p = pd.DataFrame(pts_lista)
+                            df_p["serie"] = etiqueta
+                            return alt.Chart(df_p).mark_circle(size=12, opacity=0.25, color=color).encode(
+                                x="x:Q", y="y:Q",
+                                tooltip=["x", "y"]
+                            )
+
+                        curva_a = _curva(fa, aa, ba, label_a, "#2563eb")
+                        curva_b = _curva(fb, ab, bb, label_b, "#dc2626")
+
+                        capas = [curva_a, curva_b]
+
+                        pts_a = res_a.get("puntos_grafica", [])
+                        pts_b = res_b.get("puntos_grafica", [])
+                        if pts_a:
+                            capas.append(_puntos(pts_a, label_a, "#2563eb"))
+                        if pts_b:
+                            capas.append(_puntos(pts_b, label_b, "#dc2626"))
+
+                        chart_fns = alt.layer(*capas).properties(
+                            height=420,
+                            title="Funciones integrando y puntos de muestreo MC"
+                        ).interactive()
+                        st.altair_chart(chart_fns, use_container_width=True)
+                        st.caption(f"Azul: {label_a} | Rojo: {label_b} — los puntos son las evaluaciones aleatorias de MC (máx 2000 c/u).")
+
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+        elif modo == "Monty Hall (Juego)":
+            with st.container(border=True):
+                st.subheader("🐐 El Casino de Monty Hall (Destructor de Intuición)")
+                st.caption("Juego matemático clásico: 3 puertas, 1 auto, 2 cabras. ¿Conviene cambiar de puerta después de que el presentador abre una que tiene una cabra? ¡Dejemos que Monte Carlo lo demuestre!")
+                
+                with st.form("mc_monty_hall"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        num_partidas = st.number_input("Número de Partidas a jugar", min_value=100, value=10000, step=1000, key="mh_partidas")
+                    with c2:
+                        semilla_mh = st.number_input("Semilla Aleatoria", value=42, min_value=0, step=1, key="mh_seed")
+                        usar_semilla_mh = st.checkbox("Fijar semilla", value=True, key="mh_usar_seed")
+                        animar_mh = st.checkbox("Animar simulación", value=True, key="mh_animar")
+                    
+                    run_mh = st.form_submit_button("Simular las partidas", type="primary")
+
+            if run_mh:
+                try:
+                    seed = int(semilla_mh) if usar_semilla_mh else None
+                    res_mh = simular_monty_hall(int(num_partidas), semilla=seed)
+                    
+                    with st.container(border=True):
+                        st.markdown("### Resultados Estadísticos")
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Partidas Jugadas", f"{res_mh['num_partidas']:,}")
+                        
+                        win_rate_m = res_mh['tasa_mantener'] * 100
+                        col2.metric("Estrategia: MANTENER", f"{win_rate_m:.2f}%", f"{res_mh['wins_mantener']} ganadas", delta_color="off")
+                        
+                        win_rate_c = res_mh['tasa_cambiar'] * 100
+                        delta_color = "normal" if win_rate_c > win_rate_m else "inverse"
+                        col3.metric("Estrategia: CAMBIAR", f"{win_rate_c:.2f}%", f"{res_mh['wins_cambiar']} ganadas", delta_color=delta_color)
+
+                    historial = res_mh["historial"]
+                    if historial:
+                        with st.container(border=True):
+                            st.markdown("### La Carrera de Monte Carlo: Cambiar vs Mantener")
+                            st.caption("0")
+                            
+                            import pandas as pd
+                            df_h = pd.DataFrame(historial)
+                            df_h_melted = df_h.melt("partida", var_name="Estrategia", value_name="Win Rate")
+                            
+                            df_h_melted["Estrategia"] = df_h_melted["Estrategia"].replace({
+                                "win_rate_mantener": "Mantener mi puerta original",
+                                "win_rate_cambiar": "Cambiar de puerta"
+                            })
+                            
+                            if animar_mh:
+                                import time
+                                placeholder = st.empty()
+                                # Animar en chunks de 20 cuadros
+                                num_frames = min(20, len(historial))
+                                chunk_size = max(1, len(historial) // num_frames)
+                                
+                                for i in range(1, num_frames + 1):
+                                    idx = i * chunk_size if i < num_frames else len(historial)
+                                    df_chunk = pd.DataFrame(historial[:idx]).melt("partida", var_name="Estrategia", value_name="Win Rate")
+                                    df_chunk["Estrategia"] = df_chunk["Estrategia"].replace({
+                                        "win_rate_mantener": "Mantener mi puerta original",
+                                        "win_rate_cambiar": "Cambiar de puerta"
+                                    })
+                                    
+                                    chart = alt.Chart(df_chunk).mark_line(strokeWidth=3).encode(
+                                        x=alt.X("partida:Q", title="Nº de Partida"),
+                                        y=alt.Y("Win Rate:Q", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(format='%')),
+                                        color=alt.Color("Estrategia:N", scale=alt.Scale(domain=["Mantener mi puerta original", "Cambiar de puerta"], range=["#ef4444", "#22c55e"])),
+                                    ).properties(height=400)
+                                    placeholder.altair_chart(chart, use_container_width=True)
+                                    time.sleep(0.1)
+                                
+                                # Gráfico interactivo final
+                                chart_f = alt.Chart(df_h_melted).mark_line(strokeWidth=3).encode(
+                                    x=alt.X("partida:Q", title="Nº de Partida"),
+                                    y=alt.Y("Win Rate:Q", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(format='%')),
+                                    color=alt.Color("Estrategia:N", scale=alt.Scale(domain=["Mantener mi puerta original", "Cambiar de puerta"], range=["#ef4444", "#22c55e"])),
+                                    tooltip=[alt.Tooltip("partida:Q"), alt.Tooltip("Estrategia:N"), alt.Tooltip("Win Rate:Q", format='.2%')]
+                                ).properties(height=400).interactive()
+                                placeholder.altair_chart(chart_f, use_container_width=True)
+                            else:
+                                chart = alt.Chart(df_h_melted).mark_line(strokeWidth=3).encode(
+                                    x=alt.X("partida:Q", title="Nº de Partida"),
+                                    y=alt.Y("Win Rate:Q", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(format='%')),
+                                    color=alt.Color("Estrategia:N", scale=alt.Scale(domain=["Mantener mi puerta original", "Cambiar de puerta"], range=["#ef4444", "#22c55e"])),
+                                    tooltip=[alt.Tooltip("partida:Q"), alt.Tooltip("Estrategia:N"), alt.Tooltip("Win Rate:Q", format='.2%')]
+                                ).properties(height=400).interactive()
+                                st.altair_chart(chart, use_container_width=True)
+                                
+                except Exception as e:
+                    st.error(f"Error procesando Monty Hall: {e}")
 
     with side_col:
         _formulas_panel("Monte Carlo")
