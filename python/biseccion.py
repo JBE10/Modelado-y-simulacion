@@ -6,6 +6,7 @@ from utils import _res
 def biseccion(f: Callable[[float], float], a: float, b: float, tol: float = 1e-7, max_iter: int = 100) -> dict[str, Any]:
     a = float(a)
     b = float(b)
+    a0, b0 = a, b  # Intervalo original para estimar iteraciones necesarias
     fa = float(f(a))
     fb = float(f(b))
 
@@ -37,8 +38,8 @@ def biseccion(f: Callable[[float], float], a: float, b: float, tol: float = 1e-7
             a, fa = c, fc
 
     raiz = a + (b - a) / 2.0
-    n_est = math.ceil(math.log2((b - a) / tol)) if tol > 0 else max_iter
-    return _res(raiz, max_iter, historial, False, f"No convergio en {max_iter} iter. Se estiman ~{n_est} para tol={tol:.0e}.")
+    n_est = math.ceil(math.log2((b0 - a0) / tol)) if tol > 0 else max_iter
+    return _res(raiz, max_iter, historial, False, f"No convergio en {max_iter} iter. Se necesitan ~{n_est} iteraciones en total para tol={tol:.0e}.")
 
 
 if __name__ == "__main__":

@@ -52,11 +52,6 @@ def secante(f: Callable[[float], float], x0: float, x1: float, tol: float = 1e-7
                 f"No convergio tras {max_iter} iter. Error final: {abs(xcurr - xprev):.4e}")
 
 
-def _res(raiz, iteraciones, historial, convergio, justificacion):
-    return {"raiz": raiz, "iteraciones": iteraciones, "historial": historial,
-            "convergio": convergio, "justificacion": justificacion}
-
-
 if __name__ == "__main__":
     f = lambda x: x**3 - x - 2
     res = secante(f, 1, 2, tol=1e-10, max_iter=50)

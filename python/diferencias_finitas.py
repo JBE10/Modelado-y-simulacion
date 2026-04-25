@@ -400,9 +400,12 @@ def diferencias_finitas_tabla(xs: list[float], ys: list[float]) -> dict:
             d1 = (ys[-1] - ys[-2]) / h
             tipo_d1 = "Regresiva"
         else:
-            # Centrada ⭐
-            h = xs[i + 1] - xs[i - 1]  # 2h si equidistante
-            d1 = (ys[i + 1] - ys[i - 1]) / h
+            # Centrada ⭐ — fórmula de Lagrange válida para h no uniforme
+            h1 = xs[i] - xs[i - 1]
+            h2 = xs[i + 1] - xs[i]
+            d1 = (ys[i - 1] * (-h2) / (h1 * (h1 + h2))
+                  + ys[i] * (h2 - h1) / (h1 * h2)
+                  + ys[i + 1] * h1 / ((h1 + h2) * h2))
             tipo_d1 = "Centrada"
 
         fila["f'(x_i)"] = d1
