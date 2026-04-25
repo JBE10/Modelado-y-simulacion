@@ -4,8 +4,6 @@ from typing import Callable, Any
 
 from utils import _res
 
-from utils import _res
-
 def secante(f: Callable[[float], float], x0: float, x1: float, tol: float = 1e-7, max_iter: int = 100) -> dict[str, Any]:
     historial = []
     xprev, xcurr = float(x0), float(x1)
