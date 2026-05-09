@@ -1,0 +1,258 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{array}
+\usepackage{mathtools}
+
+\geometry{margin=2.5cm, headheight=15pt}
+
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{keywordcolor}{RGB}{0,100,180}
+\definecolor{commentcolor}{RGB}{80,110,80}
+
+\lstset{
+  language=Python,
+  backgroundcolor=\color{codebg},
+  frame=single, rulecolor=\color{gray!40},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{keywordcolor}\bfseries,
+  commentstyle=\color{commentcolor}\itshape,
+  numbers=left, numberstyle=\tiny\color{gray}, numbersep=8pt,
+  breaklines=true, showstringspaces=false, tabsize=4,
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Modelado y Simulaci\'on --- 22/04/2026}
+\lhead{Punto 1 --- Docente: Omar C\'aceres}
+\cfoot{\thepage}
+
+\title{\textbf{Examen --- Modelado y Simulaci\'on}\\[0.3em]
+       {\large Punto 1: Ra\'ices de $f(x)=2x\cos x-(x-2)^2$}}
+\author{Juan Bautista Espino}
+\date{22 de abril de 2026}
+
+\begin{document}
+\maketitle\thispagestyle{fancy}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Enunciado}
+% ══════════════════════════════════════════════════════════════════════════════
+
+Dada la funci\'on
+\[
+  f(x) = 2x\cos(x) - (x-2)^2
+\]
+demostrar mediante el Teorema de Bolzano que existe al menos una ra\'iz en
+$[0.8,\,1.4]$ y luego aproximarla con:
+\begin{itemize}
+  \item[(a)] M\'etodo de Punto Fijo acelerado con Steffensen-Aitken, $x_0=1$, 6 cifras de precisi\'on.
+  \item[(b)] M\'etodo de Newton-Raphson, $x_0=1$, tolerancia $<10^{-8}$. Comparar ambos m\'etodos.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Paso previo: Teorema de Bolzano}
+% ══════════════════════════════════════════════════════════════════════════════
+
+$f$ es continua en $\mathbb{R}$ (composici\'on de funciones continuas). Evaluamos en
+los extremos del intervalo:
+
+\[
+  f(0.8) = 2(0.8)\cos(0.8) - (0.8-2)^2
+         = 1.6 \times 0.696707 - 1.44
+         = 1.114731 - 1.44
+         \approx -0.325\,269
+\]
+\[
+  f(1.4) = 2(1.4)\cos(1.4) - (1.4-2)^2
+         = 2.8 \times 0.169967 - 0.36
+         = 0.475907 - 0.36
+         \approx +0.115\,908
+\]
+
+Como $f(0.8) < 0$ y $f(1.4) > 0$, se cumple:
+\[
+  f(0.8)\cdot f(1.4) \approx -0.037\,701 < 0
+\]
+
+Por el \textbf{Teorema de Bolzano} existe al menos un $c\in(0.8,\,1.4)$ tal que
+$f(c)=0$. \hfill$\blacksquare$
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Parte (a) --- Steffensen-Aitken}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection*{Construcci\'on de $g(x)$}
+
+Partimos de $f(x)=0$:
+\[
+  2x\cos(x) = (x-2)^2 \implies x-2 = -\sqrt{2x\cos x}
+  \quad\text{(negativo pues $x\approx 1 < 2$)}
+\]
+\[
+  \boxed{g(x) = 2 - \sqrt{2x\cos x}}
+\]
+
+\subsection*{Condici\'on de Lipschitz}
+
+Derivando:
+\[
+  g'(x) = -\frac{\cos x - x\sin x}{\sqrt{2x\cos x}}
+\]
+
+En $x=1$:
+\[
+  g'(1) = -\frac{\cos 1 - \sin 1}{\sqrt{2\cos 1}}
+        = -\frac{0.5403 - 0.8415}{\sqrt{1.0806}}
+        = \frac{0.3012}{1.0395}
+        \approx 0.2898
+\]
+
+Si bien $|g'(1)|=0.29 < 1$ en la vecindad del punto fijo, el m\'aximo de
+$|g'|$ sobre todo el intervalo $[0.8,1.4]$ supera 1 en los extremos
+(la ra\'iz de $g'$ en $x\to0.8$). Por eso se emplea la
+\textbf{aceleraci\'on de Steffensen-Aitken}, que converge incluso cuando la
+convergencia lineal ordinaria es lenta o marginalmente estable.
+
+\subsection*{F\'ormula de Steffensen-Aitken ($\Delta^2$)}
+
+Dado $x_n$, se calculan dos iteraciones adicionales:
+\[
+  x_n^{(1)} = g(x_n), \qquad x_n^{(2)} = g\!\left(x_n^{(1)}\right)
+\]
+y se extrapola:
+\[
+  \hat{x}_n = x_n - \frac{\bigl(x_n^{(1)}-x_n\bigr)^2}{x_n^{(2)}-2x_n^{(1)}+x_n}
+\]
+
+\subsection*{Tabla de iteraciones}
+
+\begin{center}
+\begin{tabular}{ccccc r}
+\toprule
+$n$ & $x_n$ & $g(x_n)$ & $g(g(x_n))$ & $\hat{x}_n$ & $|\hat{x}_n - x_n|$ \\
+\midrule
+1 & 1.000\,000\,00 & 0.960\,478\,66 & 0.950\,736\,42 & 0.947\,549\,25 & $5.25\times10^{-2}$ \\
+2 & 0.948\,754\,93 & 0.948\,277\,00 & 0.948\,406\,07 & 0.948\,433\,89 & $8.85\times10^{-4}$ \\
+3 & 0.948\,433\,89 & 0.948\,434\,04 & 0.948\,434\,06 & 0.948\,434\,07 & $1.77\times10^{-7}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\[
+  \boxed{x^* \approx 0.948\,434\,07, \qquad |f(x^*)| \approx 1.22\times10^{-14}}
+\]
+
+La convergencia se alcanz\'o en \textbf{3 iteraciones} con precisi\'on de
+6 cifras significativas.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Parte (b) --- Newton-Raphson}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection*{Derivada de $f$}
+
+\[
+  f'(x) = \frac{d}{dx}\bigl[2x\cos x - (x-2)^2\bigr]
+        = 2\cos x - 2x\sin x - 2(x-2)
+\]
+
+\subsection*{Iteraci\'on}
+
+\[
+  x_{n+1} = x_n - \frac{f(x_n)}{f'(x_n)}
+\]
+
+\subsection*{Tabla de iteraciones ($x_0 = 1$, tol\,$= 10^{-8}$)}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{c r r r r r}
+\toprule
+$n$ & $x_n$ & $f(x_n)$ & $f'(x_n)$ & $x_{n+1}$ & $|x_{n+1}-x_n|$ \\
+\midrule
+1 & 1.000\,000\,000\,0 & $+0.080\,605$ & $1.397\,663$ & 0.942\,328\,993\,2 & $5.77\times10^{-2}$ \\
+2 & 0.942\,328\,993\,2 & $-0.010\,667$ & $1.766\,598$ & 0.948\,367\,107\,0 & $6.04\times10^{-3}$ \\
+3 & 0.948\,367\,107\,0 & $-0.000\,116$ & $1.728\,257$ & 0.948\,434\,062\,0 & $6.70\times10^{-5}$ \\
+4 & 0.948\,434\,062\,0 & $-1.2\times10^{-8}$ & $1.727\,832$ & 0.948\,434\,069\,9 & $8.25\times10^{-9}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\[
+  \boxed{x^* \approx 0.948\,434\,069\,9, \qquad |f(x^*)| = 0}
+\]
+
+Convergencia en \textbf{4 iteraciones} con tolerancia $<10^{-8}$.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{An\'alisis comparativo}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Criterio} & \textbf{Steffensen-Aitken} & \textbf{Newton-Raphson} \\
+\midrule
+Iteraciones hasta tol.\,$6\times10^{-7}$ & 3 & 3 \\
+Iteraciones hasta tol.\,$10^{-8}$        & $\sim$4 & 4 \\
+Evaluaciones de $f$ por iteraci\'on      & 2 ($g$ y $g\circ g$) & 2 ($f$ y $f'$) \\
+Requiere derivada expl\'icita            & No & S\'i \\
+Orden de convergencia                    & Superlineal ($\sim1.62$) & Cuadr\'atico ($\sim2$) \\
+Riesgo de divergencia                    & Bajo (extra para aceleraci\'on) & Medio (si $f'\approx0$) \\
+Dificultad de implementaci\'on           & Media & Baja \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Conclusi\'on.}
+Ambos m\'etodos convergen a la misma ra\'iz
+$x^* \approx 0.948\,434\,070$ con igual precisi\'on final.
+\textbf{Newton-Raphson} es m\'as simple y tiene convergencia cuadr\'atica
+te\'orica, pero requiere calcular $f'(x)$ anal\'iticamente.
+\textbf{Steffensen-Aitken} evita la derivada expl\'icita y es robusto cuando
+la contracci\'on de $g$ no es estricta en todo el intervalo, al precio de
+requerir dos evaluaciones de $g$ por iteraci\'on en lugar de una.
+Para esta funci\'on, la diferencia de eficiencia entre ambos es m\'inima.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Ap\'endice: c\'odigo Python}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{lstlisting}[caption={Steffensen-Aitken y Newton-Raphson para f(x)}]
+import math
+
+def f(x):  return 2*x*math.cos(x) - (x - 2)**2
+def df(x): return 2*math.cos(x) - 2*x*math.sin(x) - 2*(x - 2)
+def g(x):  return 2 - math.sqrt(2*x*math.cos(x))
+
+# Steffensen-Aitken
+x = 1.0
+for i in range(30):
+    x0, x1, x2 = x, g(x), g(g(x))
+    d = x2 - 2*x1 + x0
+    if abs(d) < 1e-15: break
+    xh = x0 - (x1 - x0)**2 / d
+    if abs(xh - x) < 5e-7: break
+    x = xh
+
+# Newton-Raphson
+x = 1.0
+for _ in range(20):
+    xn = x - f(x) / df(x)
+    if abs(xn - x) < 1e-8: break
+    x = xn
+\end{lstlisting}
+
+\end{document}

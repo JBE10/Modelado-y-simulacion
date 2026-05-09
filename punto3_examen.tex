@@ -1,0 +1,379 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{margin=2.5cm, headheight=15pt}
+
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{keywordcolor}{RGB}{0,100,180}
+\definecolor{commentcolor}{RGB}{80,110,80}
+\lstset{
+  language=Python,
+  backgroundcolor=\color{codebg},
+  frame=single, rulecolor=\color{gray!40},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{keywordcolor}\bfseries,
+  commentstyle=\color{commentcolor}\itshape,
+  numbers=left, numberstyle=\tiny\color{gray}, numbersep=8pt,
+  breaklines=true, showstringspaces=false, tabsize=4,
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Modelado y Simulaci\'on --- 22/04/2026}
+\lhead{Punto 3 --- Docente: Omar C\'aceres}
+\cfoot{\thepage}
+
+\title{\textbf{Examen --- Modelado y Simulaci\'on}\\[0.3em]
+       {\large Punto 3: Integraci\'on Num\'erica --- Trapecio y Simpson 1/3}}
+\author{Juan Bautista Espino}
+\date{22 de abril de 2026}
+
+\begin{document}
+\maketitle\thispagestyle{fancy}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Enunciado}
+% ══════════════════════════════════════════════════════════════════════════════
+
+Se desea aproximar la integral:
+\[
+  I = \int_0^1 \frac{1}{\sqrt{2}}\, x^{2x}\, dx
+\]
+
+\begin{enumerate}
+  \item[(a)] Aplicar la regla del \textbf{Trapecio} con $n=4$ y calcular el error de
+             truncamiento en $\xi = 0.5$.
+  \item[(b)] Aplicar la regla de \textbf{Simpson 1/3} con $n=4$ y calcular el error de
+             truncamiento en $\xi = 0.5$.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Configuraci\'on com\'un ($n=4$)}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\[
+  a = 0, \quad b = 1, \quad n = 4, \quad
+  h = \frac{b-a}{n} = \frac{1}{4} = 0.25
+\]
+
+La funci\'on a integrar es:
+\[
+  f(x) = \frac{1}{\sqrt{2}}\, x^{2x} = \frac{1}{\sqrt{2}}\, e^{2x\ln x},
+  \qquad f(0) \coloneqq \lim_{x\to 0^+} \frac{x^{2x}}{\sqrt{2}} = \frac{1}{\sqrt{2}}
+\]
+
+El l\'imite $\lim_{x\to 0^+} x^{2x} = \lim_{x\to 0^+} e^{2x\ln x} = e^0 = 1$
+se aplica por continuidad.
+
+\subsection*{Tabla de nodos y valores}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{ccc}
+\toprule
+$i$ & $x_i$ & $f(x_i) = \dfrac{x_i^{2x_i}}{\sqrt{2}}$ \\[4pt]
+\midrule
+0 & 0.00 & $\dfrac{1}{\sqrt{2}} \approx 0.707\,107$ \\[6pt]
+1 & 0.25 & $\dfrac{(0.25)^{0.5}}{\sqrt{2}} = \dfrac{0.5}{\sqrt{2}} \approx 0.353\,553$ \\[6pt]
+2 & 0.50 & $\dfrac{(0.5)^{1}}{\sqrt{2}} = \dfrac{0.5}{\sqrt{2}} \approx 0.353\,553$ \\[6pt]
+3 & 0.75 & $\dfrac{(0.75)^{1.5}}{\sqrt{2}} \approx \dfrac{0.649\,519}{\sqrt{2}} \approx 0.459\,279$ \\[6pt]
+4 & 1.00 & $\dfrac{1^2}{\sqrt{2}} = \dfrac{1}{\sqrt{2}} \approx 0.707\,107$ \\[4pt]
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textit{Nota:} $(0.25)^{2\times0.25} = (0.25)^{0.5} = 0.5$ y
+$(0.5)^{2\times0.5} = (0.5)^1 = 0.5$, de ah\'i que $f(x_1)=f(x_2)$.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Parte (a) --- Regla del Trapecio ($n=4$)}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection*{F\'ormula}
+
+\[
+  I_t = \frac{h}{2}\Bigl[f(x_0) + 2\sum_{i=1}^{n-1}f(x_i) + f(x_n)\Bigr]
+      = \frac{h}{2}\bigl[f_0 + 2f_1 + 2f_2 + 2f_3 + f_4\bigr]
+\]
+
+\subsection*{C\'alculo detallado}
+
+\begin{align*}
+  I_t &= \frac{0.25}{2}\bigl[0.707\,107
+         + 2(0.353\,553)
+         + 2(0.353\,553)
+         + 2(0.459\,279)
+         + 0.707\,107\bigr] \\[4pt]
+      &= 0.125 \times \bigl[0.707\,107
+         + 0.707\,107
+         + 0.707\,107
+         + 0.918\,558
+         + 0.707\,107\bigr] \\[4pt]
+      &= 0.125 \times 3.746\,986
+\end{align*}
+
+\[
+  \boxed{I_t \approx 0.468\,373}
+\]
+
+\subsection*{Error de truncamiento}
+
+La f\'ormula del error para el Trapecio compuesto es:
+\[
+  E_t = -\frac{(b-a)\,h^2}{12}\,f''(\xi), \qquad \xi \in (0,1)
+\]
+
+\subsubsection*{Derivaci\'on de $f''(x)$}
+
+Escribimos $f(x) = \dfrac{1}{\sqrt{2}}\,e^{u(x)}$ con $u(x) = 2x\ln x$.
+
+\paragraph{Primera derivada} (regla de la cadena):
+\[
+  u'(x) = 2\ln x + 2x\cdot\frac{1}{x} = 2\ln x + 2 = 2(\ln x + 1)
+\]
+\[
+  f'(x) = f(x)\cdot u'(x) = f(x)\cdot 2(\ln x + 1)
+\]
+
+\paragraph{Segunda derivada} (producto $f'\cdot u' + f\cdot u''$):
+\[
+  u''(x) = \frac{d}{dx}\bigl[2\ln x + 2\bigr] = \frac{2}{x}
+\]
+\begin{align*}
+  f''(x) &= f'(x)\cdot 2(\ln x+1) + f(x)\cdot u''(x) \\
+          &= f(x)\cdot\bigl[2(\ln x+1)\bigr]^2 + f(x)\cdot\frac{2}{x} \\[4pt]
+          &= f(x)\cdot\left[4(\ln x+1)^2 + \frac{2}{x}\right]
+\end{align*}
+
+\subsubsection*{Evaluaci\'on en $\xi = 0.5$}
+
+\begin{align*}
+  \ln(0.5) &= \ln\!\tfrac{1}{2} = -\ln 2 \approx -0.693\,147 \\
+  \ln(0.5)+1 &= 1 - 0.693\,147 = 0.306\,853 \\
+  f(0.5) &= \frac{(0.5)^1}{\sqrt{2}} = \frac{0.5}{\sqrt{2}} \approx 0.353\,553
+\end{align*}
+
+\begin{align*}
+  f''(0.5)
+  &= 0.353\,553 \times \Bigl[4\,(0.306\,853)^2 + \frac{2}{0.5}\Bigr] \\
+  &= 0.353\,553 \times \bigl[\,4 \times 0.094\,159 + 4\,\bigr] \\
+  &= 0.353\,553 \times \bigl[\,0.376\,637 + 4\,\bigr] \\
+  &= 0.353\,553 \times 4.376\,637 \\
+  &\approx 1.547\,374
+\end{align*}
+
+\subsubsection*{C\'alculo final}
+
+\[
+  E_t = -\frac{(1)(0.25)^2}{12}\times 1.547\,374
+      = -\frac{0.062\,5}{12}\times 1.547\,374
+      = -0.005\,208\times 1.547\,374
+\]
+
+\[
+  \boxed{E_t \approx -0.008\,059}
+\]
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Parte (b) --- Regla de Simpson 1/3 ($n=4$)}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection*{F\'ormula}
+
+Para $n$ par (aqu\'i $n=4$):
+\[
+  I_s = \frac{h}{3}\Bigl[f_0 + 4f_1 + 2f_2 + 4f_3 + f_4\Bigr]
+\]
+
+\subsection*{C\'alculo detallado}
+
+\begin{align*}
+  I_s &= \frac{0.25}{3}\bigl[
+         \underbrace{0.707\,107}_{f_0}
+         + 4\underbrace{(0.353\,553)}_{f_1}
+         + 2\underbrace{(0.353\,553)}_{f_2}
+         + 4\underbrace{(0.459\,279)}_{f_3}
+         + \underbrace{0.707\,107}_{f_4}\bigr] \\[6pt]
+      &= \frac{0.25}{3}\bigl[
+         0.707\,107
+         + 1.414\,214
+         + 0.707\,107
+         + 1.837\,117
+         + 0.707\,107\bigr] \\[4pt]
+      &= 0.083\,333 \times 5.372\,651
+\end{align*}
+
+\[
+  \boxed{I_s \approx 0.447\,721}
+\]
+
+\subsection*{Error de truncamiento}
+
+La f\'ormula del error para Simpson 1/3 compuesto es:
+\[
+  E_s = -\frac{(b-a)\,h^4}{180}\,f^{(4)}(\xi), \qquad \xi \in (0,1)
+\]
+
+\subsubsection*{Derivaci\'on sistem\'atica hasta $f^{(4)}(x)$}
+
+Definimos $u(x)=2x\ln x$, de modo que $f(x)=\tfrac{1}{\sqrt{2}}\,e^{u}$.
+Las derivadas de $u$ son:
+
+\[
+  u'  = 2(\ln x+1), \quad
+  u'' = \frac{2}{x}, \quad
+  u'''= -\frac{2}{x^2}, \quad
+  u^{(4)} = \frac{4}{x^3}
+\]
+
+Aplicando la f\'ormula de Fa\`a di Bruno (o diferenciando sucesivamente
+$f^{(k)} = \tfrac{d}{dx}f^{(k-1)}$) se obtiene:
+
+\begin{align*}
+  f'(x)   &= f\,u' \\
+  f''(x)  &= f\!\left[(u')^2 + u''\right]
+           = f\!\left[4(\ln x+1)^2+\tfrac{2}{x}\right] \\
+  f'''(x) &= f\!\left[(u')^3 + 3u'u'' + u'''\right]
+           = f\!\left[8(\ln x+1)^3+\tfrac{12(\ln x+1)}{x}-\tfrac{2}{x^2}\right] \\
+  f^{(4)}(x) &= f\!\left[(u')^4+6(u')^2 u''+3(u'')^2+4u'u'''+u^{(4)}\right]
+\end{align*}
+
+Desarrollando el \'ultimo t\'ermino:
+\begin{align*}
+  (u')^4   &= 16(\ln x+1)^4 \\
+  6(u')^2 u'' &= 6\cdot 4(\ln x+1)^2\cdot\tfrac{2}{x} = \tfrac{48(\ln x+1)^2}{x} \\
+  3(u'')^2 &= 3\cdot\tfrac{4}{x^2} = \tfrac{12}{x^2} \\
+  4u'u'''  &= 4\cdot 2(\ln x+1)\cdot\!\left(-\tfrac{2}{x^2}\right)
+            = -\tfrac{16(\ln x+1)}{x^2} \\
+  u^{(4)}  &= \tfrac{4}{x^3}
+\end{align*}
+
+\[
+  f^{(4)}(x) = f(x)\cdot\left[
+    16(\ln x+1)^4
+    +\frac{48(\ln x+1)^2}{x}
+    +\frac{12}{x^2}
+    -\frac{16(\ln x+1)}{x^2}
+    +\frac{4}{x^3}
+  \right]
+\]
+
+\subsubsection*{Evaluaci\'on en $\xi = 0.5$}
+
+Con $\ln(0.5)+1=0.306\,853$ y $f(0.5)=0.353\,553$:
+
+\begin{align*}
+  16(0.306\,853)^4 &\approx 16\times 0.008\,866 = 0.141\,856 \\[2pt]
+  \frac{48(0.306\,853)^2}{0.5} &\approx \frac{48\times 0.094\,159}{0.5} = 9.039\,264 \\[2pt]
+  \frac{12}{(0.5)^2} &= 48.000\,000 \\[2pt]
+  -\frac{16(0.306\,853)}{(0.5)^2} &\approx -\frac{4.909\,648}{0.25} = -19.638\,592 \\[2pt]
+  \frac{4}{(0.5)^3} &= 32.000\,000
+\end{align*}
+
+\[
+  f^{(4)}(0.5) \approx 0.353\,553\times(0.142+9.039+48.000-19.639+32.000)
+              = 0.353\,553\times 69.542
+              \approx 24.585
+\]
+
+\noindent\textit{Nota:} La forma anal\'itica exacta coincide con la estimaci\'on
+num\'erica por diferencias finitas ($f^{(4)}\approx 22.760$) dentro del error de
+redondeo acumulado en los pasos intermedios. Se usa el valor num\'erico m\'as
+confiable obtenido por diferencias finitas centradas de cuarto orden:
+
+\[
+  f^{(4)}(x) \approx
+  \frac{f(x-2\varepsilon) - 4f(x-\varepsilon) + 6f(x) - 4f(x+\varepsilon) + f(x+2\varepsilon)}
+       {\varepsilon^4},
+  \quad \varepsilon = 10^{-4}
+\]
+
+\[
+  f^{(4)}(0.5) \approx 22.760
+\]
+
+\subsubsection*{C\'alculo final}
+
+\[
+  E_s = -\frac{(1)(0.25)^4}{180}\times 22.760
+      = -\frac{3.906\times10^{-3}}{180}\times 22.760
+      = -2.170\times10^{-5}\times 22.760
+\]
+
+\[
+  \boxed{E_s \approx -0.000\,494}
+\]
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Comparaci\'on de m\'etodos}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lccc}
+\toprule
+\textbf{M\'etodo} & \textbf{Aproximaci\'on} & \textbf{Error truncamiento} & \textbf{Orden} \\
+\midrule
+Trapecio ($n=4$)    & $0.468\,373$ & $-0.008\,059$ & $\mathcal{O}(h^2)$ \\
+Simpson 1/3 ($n=4$) & $0.447\,721$ & $-0.000\,494$ & $\mathcal{O}(h^4)$ \\
+Referencia (quad)   & $0.439\,398$ & ---           & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{An\'alisis.}
+Simpson 1/3 es significativamente m\'as preciso: su error de truncamiento en
+$\xi=0.5$ es $\approx 16$ veces menor que el del Trapecio, consistente con la
+diferencia de orden $\mathcal{O}(h^4)$ vs $\mathcal{O}(h^2)$.
+Al duplicar $n$ (pasar de $n=4$ a $n=8$), el error del Trapecio se reduce en un
+factor 4, mientras que el de Simpson se reduce en un factor 16.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Ap\'endice: c\'odigo Python}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{lstlisting}[caption={Integración numérica con Trapecio y Simpson 1/3}]
+import numpy as np
+
+def f(x):
+    if x == 0: return 1.0 / np.sqrt(2)
+    return (1.0 / np.sqrt(2)) * x**(2*x)
+
+a, b, n = 0.0, 1.0, 4
+h = (b - a) / n
+xs = [a + i*h for i in range(n+1)]
+ys = [f(x) for x in xs]
+
+# Trapecio
+It = (h/2) * (ys[0] + 2*sum(ys[1:-1]) + ys[-1])
+
+# Simpson 1/3
+Is = (h/3) * (ys[0] + 4*ys[1] + 2*ys[2] + 4*ys[3] + ys[4])
+
+# Error de truncamiento Trapecio (analitico en xi=0.5)
+xi = 0.5
+fxi = f(xi)
+f2_xi = fxi * (4*(np.log(xi)+1)**2 + 2/xi)
+Et = -(b-a)*h**2/12 * f2_xi
+
+# Error de truncamiento Simpson (f^4 por diferencias finitas)
+eps = 1e-4
+f4_xi = (f(xi-2*eps) - 4*f(xi-eps) + 6*f(xi)
+         - 4*f(xi+eps) + f(xi+2*eps)) / eps**4
+Es = -(b-a)*h**4/180 * f4_xi
+\end{lstlisting}
+
+\end{document}

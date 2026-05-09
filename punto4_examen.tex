@@ -1,0 +1,235 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{mathtools}
+
+\geometry{margin=2.5cm, headheight=15pt}
+
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{keywordcolor}{RGB}{0,100,180}
+\definecolor{commentcolor}{RGB}{80,110,80}
+\lstset{
+  language=Python,
+  backgroundcolor=\color{codebg},
+  frame=single, rulecolor=\color{gray!40},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{keywordcolor}\bfseries,
+  commentstyle=\color{commentcolor}\itshape,
+  numbers=left, numberstyle=\tiny\color{gray}, numbersep=8pt,
+  breaklines=true, showstringspaces=false, tabsize=4,
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Modelado y Simulaci\'on --- 22/04/2026}
+\lhead{Punto 4 --- Docente: Omar C\'aceres}
+\cfoot{\thepage}
+
+\title{\textbf{Examen --- Modelado y Simulaci\'on}\\[0.3em]
+       {\large Punto 4: Integraci\'on Doble por Monte Carlo}}
+\author{Juan Bautista Espino}
+\date{22 de abril de 2026}
+
+\begin{document}
+\maketitle\thispagestyle{fancy}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Enunciado}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\[
+  I = \int_0^1 \int_0^2 e^{3(x-y)}\,dy\,dx
+\]
+
+\begin{enumerate}
+  \item[(a)] Aproximar $I$ por Monte Carlo con \texttt{np.random.seed(0)}, $n=10\,000$.
+        Resolver analíticamente y presentar tabla de estad\'isticos (media, varianza,
+        desvici\'on est\'andar, error est\'andar, IC 95\%).
+  \item[(b)] Demostrar que el error decrece como $1/\sqrt{n}$. Hallar la nueva muestra
+        $n'$ para reducir el error a la mitad y verificar simulando.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Soluci\'on anal\'itica (verificaci\'on)}
+% ══════════════════════════════════════════════════════════════════════════════
+
+Se factoriza el integrando: $e^{3(x-y)} = e^{3x}\cdot e^{-3y}$.
+
+\paragraph{Integral interior} (en $y$, con $x$ fijo):
+\[
+  \int_0^2 e^{3x}e^{-3y}\,dy
+  = e^{3x}\!\left[-\frac{1}{3}e^{-3y}\right]_0^2
+  = e^{3x}\cdot\frac{1}{3}\bigl(1 - e^{-6}\bigr)
+\]
+
+\paragraph{Integral exterior} (en $x$):
+\[
+  I = \frac{1-e^{-6}}{3}\int_0^1 e^{3x}\,dx
+    = \frac{1-e^{-6}}{3}\cdot\left[\frac{e^{3x}}{3}\right]_0^1
+    = \frac{(e^3-1)(1-e^{-6})}{9}
+\]
+
+Sustituyendo valores num\'ericos:
+\[
+  e^3 - 1 \approx 19.085\,537, \qquad
+  1 - e^{-6} \approx 0.997\,521
+\]
+
+\[
+  \boxed{I = \frac{(e^3-1)(1-e^{-6})}{9} \approx 2.115\,359}
+\]
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Parte (a) --- Estimaci\'on por Monte Carlo ($n=10\,000$)}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection*{Fundamento te\'orico}
+
+Para integrar $f(x,y)$ sobre el rect\'angulo $\mathcal{R} = [0,1]\times[0,2]$
+de \'area $A = 1\times 2 = 2$, se generan $n$ puntos aleatorios uniformes
+$(x_i, y_i)\sim\mathcal{U}(\mathcal{R})$ y se estima:
+
+\[
+  \hat{I} = A\cdot\frac{1}{n}\sum_{i=1}^{n} f(x_i, y_i)
+           = A\cdot\bar{f}
+\]
+
+Por la Ley de Grandes N\'umeros, $\hat{I}\xrightarrow{n\to\infty} I$.
+
+\subsection*{Implementaci\'on}
+
+\begin{lstlisting}[caption={Monte Carlo con n = 10 000 (\texttt{seed=0})}]
+import numpy as np
+
+np.random.seed(0)
+n = 10_000
+A = 1.0 * 2.0   # area del rectangulo [0,1]x[0,2]
+
+x = np.random.uniform(0, 1, n)
+y = np.random.uniform(0, 2, n)
+fxy = np.exp(3 * (x - y))
+
+media_muestral = np.mean(fxy)
+I_mc = A * media_muestral
+varianza  = np.var(fxy, ddof=1)
+desv_std  = np.std(fxy, ddof=1)
+error_std = desv_std / np.sqrt(n)
+IC_inf = I_mc - 1.96 * A * error_std
+IC_sup = I_mc + 1.96 * A * error_std
+\end{lstlisting}
+
+\subsection*{Tabla de estad\'isticos}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{lll}
+\toprule
+\textbf{Estad\'istico} & \textbf{S\'imbolo / F\'ormula} & \textbf{Valor} \\
+\midrule
+Media muestral & $\bar{f} = \frac{1}{n}\sum f(x_i,y_i)$ & $1.086\,293$ \\
+Estimaci\'on MC & $\hat{I} = A\cdot\bar{f}$ & $2.172\,586$ \\
+Varianza & $s^2 = \frac{1}{n-1}\sum(f_i-\bar{f})^2$ & $4.698\,309$ \\
+Desv. est\'andar & $s$ & $2.167\,558$ \\
+Error est\'andar & $\mathrm{SE} = s/\sqrt{n}$ & $0.021\,676$ \\
+IC 95\% (inferior) & $\hat{I} - 1.96\cdot A\cdot\mathrm{SE}$ & $2.087\,618$ \\
+IC 95\% (superior) & $\hat{I} + 1.96\cdot A\cdot\mathrm{SE}$ & $2.257\,555$ \\
+Valor anal\'itico & $I = (e^3-1)(1-e^{-6})/9$ & $2.115\,359$ \\
+Error absoluto & $|\hat{I} - I|$ & $0.057\,228$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+El valor anal\'itico $I = 2.115\,359$ cae dentro del intervalo de confianza
+$[2.088,\, 2.258]$. \checkmark
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Parte (b) --- Reducci\'on del error: $1/\!\sqrt{n}$}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection*{Demostraci\'on matem\'atica}
+
+El error est\'andar del estimador Monte Carlo es:
+\[
+  \varepsilon(n) = A\cdot\frac{s}{\sqrt{n}}
+\]
+
+Supongamos que se desea un nuevo tama\~no $n'$ tal que el error se reduzca a
+la mitad:
+\[
+  \varepsilon(n') = \frac{\varepsilon(n)}{2}
+  \implies
+  A\cdot\frac{s}{\sqrt{n'}} = \frac{1}{2}\cdot A\cdot\frac{s}{\sqrt{n}}
+  \implies
+  \sqrt{n'} = 2\sqrt{n}
+  \implies
+  \boxed{n' = 4n}
+\]
+
+Para reducir el error a la mitad, la muestra debe \textbf{cuadruplicarse}.
+En general, para reducir el error en un factor $k$:
+\[
+  n' = k^2\cdot n
+\]
+
+Esto refleja la convergencia ``lenta'' de Monte Carlo: $\varepsilon \propto 1/\!\sqrt{n}$,
+independientemente de la dimensi\'on del problema (ventaja sobre m\'etodos
+determin\'isticos en dimensi\'on alta).
+
+\subsection*{Verificaci\'on: simulaci\'on con $n' = 4n = 40\,000$}
+
+\begin{lstlisting}[caption={Segunda simulación con n' = 40 000}]
+np.random.seed(0)
+n2 = 4 * n   # 40 000
+x2 = np.random.uniform(0, 1, n2)
+y2 = np.random.uniform(0, 2, n2)
+fxy2   = np.exp(3 * (x2 - y2))
+I_mc2  = A * np.mean(fxy2)
+se2    = np.std(fxy2, ddof=1) / np.sqrt(n2)
+error2 = A * se2
+\end{lstlisting}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Par\'ametro} & \textbf{$n = 10\,000$} & \textbf{$n' = 40\,000$} \\
+\midrule
+Estimaci\'on $\hat{I}$ & $2.172\,586$ & $2.107\,378$ \\
+Error est\'andar       & $0.021\,676$ & $0.010\,477$ \\
+$A\cdot\mathrm{SE}$    & $0.043\,351$ & $0.020\,955$ \\
+IC 95\% & $[2.088,\; 2.258]$ & $[2.066,\; 2.148]$ \\
+Error absoluto         & $0.057\,228$ & $0.007\,980$ \\
+\midrule
+Raz\'on de errores $\varepsilon_1/\varepsilon_2$ & \multicolumn{2}{c}{$2.069 \approx 2$ \checkmark} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+El error del estimador con $n'=40\,000$ es aproximadamente la mitad del obtenido
+con $n=10\,000$ (raz\'on $\approx 2.07$), confirmando la relaci\'on te\'orica
+$\varepsilon \propto 1/\!\sqrt{n}$.
+
+\subsection*{Conclusi\'on}
+
+\begin{enumerate}
+  \item Monte Carlo estima $I \approx 2.173$ con $n=10\,000$; el valor exacto
+        $I = 2.115$ queda dentro del IC 95\%.
+  \item Para reducir el error a la mitad se necesitan $n' = 4n = 40\,000$ muestras.
+  \item La simulaci\'on con $n'=40\,000$ confirma que el error se redujo de
+        $\approx 0.043$ a $\approx 0.021$ (factor $\approx 2$).
+  \item La ventaja de Monte Carlo sobre m\'etodos determin\'isticos crece con la
+        dimensi\'on: el error es siempre $\mathcal{O}(1/\!\sqrt{n})$,
+        sin importar la dimensi\'on del dominio de integraci\'on.
+\end{enumerate}
+
+\end{document}

@@ -1,4 +1,12 @@
 import math
+import sys
+from pathlib import Path
+
+# Si se ejecuta `streamlit run python/dashboard.py` desde la raíz del repo,
+# Python no encuentra los módulos locales (biseccion, etc.).
+_dash_dir = Path(__file__).resolve().parent
+if str(_dash_dir) not in sys.path:
+    sys.path.insert(0, str(_dash_dir))
 
 import altair as alt
 import pandas as pd
@@ -7,6 +15,7 @@ import streamlit as st
 from biseccion import biseccion
 from newton_raphson import newton_raphson
 from punto_fijo import punto_fijo
+from steffensen import steffensen
 from secante import secante
 from diferencias_finitas import (
     diferencias_finitas_funcion,
@@ -27,6 +36,16 @@ from montecarlo import (
     multi_run_1d,
     simular_monty_hall,
 )
+from kalman_voz import (
+    generar_senal_voz,
+    agregar_ruido,
+    comparar_metodos,
+    calcular_mse,
+    calcular_snr,
+    filtro_kalman,
+)
+from runge_kutta import euler_method, rk2_method, rk4_method
+from sir_model import sir_euler, sir_rk4, calcular_metricas
 
 MATH_NS = {
     "sin": math.sin, "cos": math.cos, "tan": math.tan,
@@ -134,6 +153,33 @@ def make_fn_2d(expr):
         raise ValueError(f"Expresión matemática 2D inválida: {e}")
 
 
+def make_fn_ty(expr):
+    import sympy
+    expr = norm(expr).replace("ln(", "log(")
+    MATH_SYMPY_NS = {
+        "pi": sympy.pi, "e": sympy.E, "E": sympy.E,
+        "sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
+        "exp": sympy.exp, "log": sympy.log, "ln": sympy.log,
+        "sqrt": sympy.sqrt, "abs": sympy.Abs,
+        "cbrt": lambda z: sympy.root(z, 3),
+    }
+    try:
+        parsed_expr = sympy.sympify(expr, locals=MATH_SYMPY_NS)
+        t_sym, y_sym = sympy.Symbol('t'), sympy.Symbol('y')
+        f_lambdified = sympy.lambdify((t_sym, y_sym), parsed_expr, "math")
+        def f(tv, yv):
+            try:
+                val = f_lambdified(tv, yv)
+                if isinstance(val, complex) and val.imag == 0:
+                    val = val.real
+                return float(val)
+            except Exception:
+                return float('nan')
+        return f
+    except Exception as e:
+        raise ValueError(f"Expresión matemática f(t,y) inválida: {e}")
+
+
 def expr_integrando_latex(expr_py: str) -> str:
     """Convierte la expresión Python de f(x) a LaTeX (integrando)."""
     try:
@@ -197,6 +243,15 @@ def _latex_bound(x: float, ndec: int) -> str:
     return f"{xf:.{ndec}f}"
 
 
+def _fmt_iter_df(df, decimals: int = 6):
+    """Formatea columnas float de una tabla de iteraciones a `decimals` decimales."""
+    fmt = {}
+    for col in df.columns:
+        if hasattr(df[col], 'dtype') and str(df[col].dtype).startswith('float'):
+            fmt[col] = f"{{:.{decimals}f}}"
+    return df.style.format(fmt, na_rep="—")
+
+
 def _formulas_panel(algoritmo):
     with st.container(border=True):
         st.markdown("### Formulas")
@@ -255,6 +310,41 @@ def _formulas_panel(algoritmo):
             st.markdown("**Intervalo de Confianza (IC)**")
             st.latex(r"IC = \hat{I} \pm Z_{\alpha/2} \frac{\sigma}{\sqrt{N}} (b-a)")
             st.caption("Donde Z = 1.96 para 95% de confianza estadística.")
+        elif algoritmo == "Ecuaciones Diferenciales (EDO)":
+            st.markdown("**Método de Euler (Taylor orden 1)**")
+            st.latex(r"y_{n+1} = y_n + h f(t_n, y_n)")
+            st.markdown("**Runge-Kutta de 2do orden (Punto Medio)**")
+            st.latex(r"k_1 = f(t_n, y_n)")
+            st.latex(r"k_2 = f(t_n + \frac{h}{2}, y_n + \frac{h}{2} k_1)")
+            st.latex(r"y_{n+1} = y_n + h k_2")
+            st.markdown("**Runge-Kutta Clásico (4to orden)**")
+            st.latex(r"k_1 = f(t_n, y_n)")
+            st.latex(r"k_2 = f(t_n + \frac{h}{2}, y_n + \frac{h}{2} k_1)")
+            st.latex(r"k_3 = f(t_n + \frac{h}{2}, y_n + \frac{h}{2} k_2)")
+            st.latex(r"k_4 = f(t_n + h, y_n + h k_3)")
+            st.latex(r"y_{n+1} = y_n + \frac{h}{6} (k_1 + 2k_2 + 2k_3 + k_4)")
+            st.caption("Euler tiene error global $\\mathcal{O}(h)$. RK4 tiene error $\\mathcal{O}(h^4)$.")
+        elif algoritmo == "Simulación SIR (Epidemia)":
+            st.markdown("**Modelo SIR**")
+            st.latex(r"\frac{dS}{dt} = -\frac{\beta \cdot S \cdot I}{N}")
+            st.latex(r"\frac{dI}{dt} = \frac{\beta \cdot S \cdot I}{N} - \gamma \cdot I")
+            st.latex(r"\frac{dR}{dt} = \gamma \cdot I")
+            st.markdown("**Número Reproductivo**")
+            st.latex(r"R_0 = \frac{\beta}{\gamma}")
+            st.caption("$R_0 > 1$ → epidemia crece. $R_0 < 1$ → se extingue.")
+            st.markdown("**Inmunidad de Rebaño**")
+            st.latex(r"\text{Umbral} = 1 - \frac{1}{R_0}")
+            st.caption("Porcentaje de la población que debe ser inmune para frenar la propagación.")
+        elif algoritmo == "Lanzamiento Cohete 3D":
+            st.markdown("**Modelo Físico (2D/3D)**")
+            st.latex(r"\frac{dx}{dt} = v_x")
+            st.latex(r"\frac{dy}{dt} = v_y")
+            st.latex(r"\frac{dv_x}{dt} = \frac{T \cos(\theta)}{m} - \frac{D \cdot v_x}{m \cdot v}")
+            st.latex(r"\frac{dv_y}{dt} = \frac{T \sin(\theta)}{m} - \frac{D \cdot v_y}{m \cdot v} - g(y)")
+            st.latex(r"\frac{dm}{dt} = -\dot{m}")
+            st.markdown("**Fuerzas**")
+            st.latex(r"D = \frac{1}{2} \rho(y) v^2 C_d A")
+            st.latex(r"g(y) = g_0 \left(\frac{R_E}{R_E+y}\right)^2")
         st.divider()
         st.markdown("### Notas")
         st.caption("Usa `ln(x)` o `log(x)` para logaritmo natural.")
@@ -373,7 +463,7 @@ def mostrar_resultados(res, f_fn, y_col, tooltip_cols, x_range, plot_cfg):
 
     with st.container(border=True):
         st.markdown("### Tabla de iteraciones")
-        st.dataframe(df_h, hide_index=True, use_container_width=True)
+        st.dataframe(_fmt_iter_df(df_h), hide_index=True, use_container_width=True)
 
     with st.container(border=True):
         st.markdown("### Graficas de convergencia")
@@ -456,7 +546,7 @@ st.divider()
 
 with st.sidebar:
     st.header("Configuracion")
-    algoritmo = st.selectbox("Algoritmo", ["Biseccion", "Punto Fijo", "Newton-Raphson", "Secante", "Comparar Raíces", "Diferencias Finitas", "Integración Numérica", "Monte Carlo"])
+    algoritmo = st.selectbox("Algoritmo", ["Biseccion", "Punto Fijo", "Newton-Raphson", "Secante", "Steffensen-Aitken", "Comparar Raíces", "Diferencias Finitas", "Integración Numérica", "Ecuaciones Diferenciales (EDO)", "Simulación SIR (Epidemia)", "Lanzamiento Cohete 3D", "Monte Carlo", "Filtro de Kalman (Voz)"])
     st.divider()
     st.markdown("### Vista de f(x)")
     n_samples = st.slider("Muestras", min_value=200, max_value=2000, step=100, value=900)
@@ -556,7 +646,7 @@ if algoritmo == "Punto Fijo":
                                                  "|f(x_{n+2})|": resid_orig,
                                                  "x_hat_n": xh, "|f(x_hat_n)|": resid_hat, "error": abs(xh - s2)})
                             df_a = pd.DataFrame(rows)
-                            st.dataframe(df_a, hide_index=True, use_container_width=True)
+                            st.dataframe(_fmt_iter_df(df_a), hide_index=True, use_container_width=True)
                             valid = [r for r in rows if r["x_hat_n"] is not None]
                             if valid:
                                 valid_resid = [r for r in valid if r["|f(x_hat_n)|"] is not None]
@@ -598,6 +688,186 @@ if algoritmo == "Punto Fijo":
                     st.error(str(e))
     with side_col:
         _formulas_panel("Punto Fijo")
+
+
+
+# ── STEFFENSEN-AITKEN ──────────────────────────────────────────────────────
+if algoritmo == "Steffensen-Aitken":
+    main_col, side_col = st.columns([2.3, 1.0], gap="large")
+    with main_col:
+        with st.container(border=True):
+            st.subheader("Steffensen-Aitken (Δ²)")
+            st.caption(
+                "Método de punto fijo **acelerado**: cada iteración usa dos evaluaciones "
+                "de g para producir x̂_n = x_n − (g(x_n)−x_n)² / (g(g(x_n))−2g(x_n)+x_n) "
+                "y ese x̂ se convierte en el siguiente iterado (no es post-proceso)."
+            )
+            with st.form("steffensen"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    expr_f_st = st.text_input("f(x)", "2*x*cos(x) - (x-2)**2", key="f_st")
+                    expr_g_st = st.text_input("g(x)  — función de iteración", "2 - sqrt(2*x*cos(x))", key="g_st")
+                    x0_st = st.number_input("x₀ (semilla)", value=1.0, format="%.10f", key="x0_st")
+                with c2:
+                    tol_st = st.number_input("Tolerancia", value=1e-7, min_value=1e-15, format="%.2e", key="tol_st")
+                    mi_st = st.number_input("Máx. iteraciones Steffensen", value=50, min_value=1, step=1, key="mi_st")
+                run_st = st.form_submit_button("Calcular", type="primary")
+
+        if run_st:
+            if not expr_f_st.strip() or not expr_g_st.strip():
+                st.error("Ingresá f(x) y g(x).")
+            else:
+                try:
+                    f_fn_st = make_fn(expr_f_st)
+                    g_fn_st = make_fn(expr_g_st)
+                    res_st = steffensen(g_fn_st, x0_st, tol=tol_st, max_iter=int(mi_st), f=f_fn_st)
+                    raiz_st = res_st["raiz"]
+
+                    # ── Resultado principal ──────────────────────────────────
+                    with st.container(border=True):
+                        if res_st["convergio"]:
+                            st.success(res_st["justificacion"])
+                        else:
+                            st.warning(res_st["justificacion"])
+                        c1m, c2m, c3m = st.columns(3)
+                        c1m.metric("Raíz aproximada", f"{raiz_st:.10f}")
+                        c2m.metric("Iteraciones Steffensen", res_st["iteraciones"])
+                        try:
+                            c3m.metric("|f(raíz)|", f"{abs(f_fn_st(raiz_st)):.4e}")
+                        except Exception:
+                            c3m.metric("|f(raíz)|", "N/A")
+
+                    # ── Tabla de iteraciones ─────────────────────────────────
+                    df_st = pd.DataFrame(res_st["historial"])
+                    if not df_st.empty:
+                        with st.container(border=True):
+                            st.markdown("### Tabla de iteraciones Steffensen")
+                            st.caption(
+                                "Cada fila = 1 paso completo (2 evaluaciones de g). "
+                                "**x_hat** es el nuevo iterado, no un post-proceso."
+                            )
+                            st.dataframe(_fmt_iter_df(df_st), hide_index=True, use_container_width=True)
+
+                        # ── Convergencia del error ───────────────────────────
+                        with st.container(border=True):
+                            st.markdown("### Convergencia del error")
+                            g1, g2 = st.columns(2)
+                            with g1:
+                                st.altair_chart(
+                                    alt.Chart(df_st).mark_line(point=True, color="#7c3aed")
+                                    .encode(
+                                        x=alt.X("iter:Q", title="Iteración Steffensen"),
+                                        y=alt.Y("x_hat:Q", title="x̂_n"),
+                                        tooltip=["iter", "x_hat", "error"],
+                                    ).properties(height=280, title="x̂_n por iteración"),
+                                    use_container_width=True,
+                                )
+                            with g2:
+                                df_err_st = df_st[df_st["error"] > 0].copy()
+                                if not df_err_st.empty:
+                                    import math as _math
+                                    df_err_st = df_err_st.copy()
+                                    df_err_st["log10_error"] = df_err_st["error"].apply(
+                                        lambda e: _math.log10(e) if e > 0 else None
+                                    )
+                                    st.altair_chart(
+                                        alt.Chart(df_err_st).mark_line(point=True, color="#ef4444")
+                                        .encode(
+                                            x=alt.X("iter:Q", title="Iteración"),
+                                            y=alt.Y("log10_error:Q", title="log₁₀(|error|)"),
+                                            tooltip=["iter", "log10_error", "error"],
+                                        ).properties(height=280, title="Convergencia logarítmica"),
+                                        use_container_width=True,
+                                    )
+
+                        # ── Orden de convergencia ────────────────────────────
+                        errores = [r["error"] for r in res_st["historial"] if r["error"] > 0]
+                        if len(errores) >= 3:
+                            with st.container(border=True):
+                                st.markdown("### Orden de convergencia estimado")
+                                p_vals = []
+                                for k_idx in range(2, len(errores)):
+                                    e0, e1, e2 = errores[k_idx-2], errores[k_idx-1], errores[k_idx]
+                                    if e1 > 0 and e0 > 0:
+                                        denom = math.log(abs(e1 / e0))
+                                        if abs(denom) > 1e-15:
+                                            p = math.log(abs(e2 / e1)) / denom
+                                            if math.isfinite(p) and 0 < p < 10:
+                                                p_vals.append(p)
+                                if p_vals:
+                                    p_est = sum(p_vals[-3:]) / len(p_vals[-3:])
+                                    st.latex(
+                                        rf"p \approx \frac{{\ln|e_{{n+1}}/e_n|}}{{\ln|e_n/e_{{n-1}}|}} "
+                                        rf"\approx {p_est:.4f}"
+                                    )
+                                    if p_est < 1.3:
+                                        st.caption("⚡ Convergencia **lineal** (p ≈ 1).")
+                                    elif p_est < 1.8:
+                                        st.caption("⚡ Convergencia **superlineal** (p ≈ 1.62). Típico de Steffensen-Aitken.")
+                                    else:
+                                        st.caption("⚡ Convergencia **cuadrática** (p ≈ 2).")
+
+                        # ── Gráfico de f(x) ──────────────────────────────────
+                        with st.container(border=True):
+                            st.markdown("### Gráfica de f(x)")
+                            iter_pts = [r["x_hat"] for r in res_st["historial"]]
+                            x_rng = [min(x0_st, raiz_st) - 1, max(x0_st, raiz_st) + 1]
+                            graficar_fx(f_fn_st, raiz_st, x_rng[0], x_rng[1],
+                                        n=plot_cfg["n_samples"],
+                                        expand=plot_cfg["expand_factor"],
+                                        iter_points=iter_pts)
+
+                        # ── Comparación rápida vs Punto Fijo puro ────────────
+                        with st.container(border=True):
+                            st.markdown("### ⚖️ Comparación: Steffensen-Aitken vs Punto Fijo puro")
+                            from punto_fijo import punto_fijo as _pf
+                            try:
+                                res_pf = _pf(g_fn_st, x0_st, tol=tol_st, max_iter=200, f=f_fn_st)
+                                cols_cmp = st.columns(2)
+                                cols_cmp[0].metric(
+                                    "🟣 Steffensen-Aitken",
+                                    f"{res_st['iteraciones']} iteraciones",
+                                    f"Raíz = {raiz_st:.8f}",
+                                )
+                                cols_cmp[1].metric(
+                                    "🔵 Punto Fijo puro",
+                                    f"{res_pf['iteraciones']} iteraciones",
+                                    f"Raíz = {res_pf['raiz']:.8f}",
+                                )
+                                ahorro = res_pf["iteraciones"] - res_st["iteraciones"]
+                                if ahorro > 0:
+                                    st.success(
+                                        f"Steffensen-Aitken convergió en **{res_st['iteraciones']}** pasos "
+                                        f"vs **{res_pf['iteraciones']}** de Punto Fijo — "
+                                        f"ahorro de **{ahorro}** iteraciones ({ahorro/res_pf['iteraciones']*100:.0f}%)."
+                                    )
+                                else:
+                                    st.info("Ambos métodos convergen en un número similar de iteraciones.")
+                            except Exception:
+                                pass
+
+                except Exception as e:
+                    st.error(str(e))
+
+    with side_col:
+        with st.container(border=True):
+            st.markdown("### Fórmula Δ²")
+            st.latex(r"x' = g(x_n)")
+            st.latex(r"x'' = g(x')")
+            st.latex(r"\hat{x}_n = x_n - \frac{(x' - x_n)^2}{x'' - 2x' + x_n}")
+            st.caption("x̂_n → siguiente iterado (no post-proceso)")
+            st.divider()
+            st.markdown("### Diferencia clave")
+            st.info("**Punto Fijo + Aitken**: itera g normalmente, muestra tabla Aitken al final.")
+            st.success("**Steffensen-Aitken**: usa x̂_n como nuevo x_n en cada paso → convergencia superlineal.")
+            st.divider()
+            st.markdown("### Condición de Lipschitz")
+            st.latex(r"|g'(x^*)| < 1 \text{ (local)")
+            st.caption("Steffensen converge incluso cuando esta condición es marginal en todo el intervalo.")
+            st.divider()
+            st.markdown("### Evaluaciones de g por iter.")
+            st.latex(r"2 \times \text{iter\_Steffensen} \approx \text{iter\_PF}")
+            st.caption("Usa el doble de evaluaciones de g por paso, pero muchos menos pasos.")
 
 
 # ── NEWTON-RAPHSON ─────────────────────────────────────────────────────────
@@ -908,7 +1178,7 @@ if algoritmo == "Diferencias Finitas":
                             "x":       x0_val + h_val,
                             "f(x)":    res["f(x0+h)"],
                         }])
-                        st.dataframe(df_eval, hide_index=True, use_container_width=True)
+                        st.dataframe(_fmt_iter_df(df_eval), hide_index=True, use_container_width=True)
 
                     # Análisis de convergencia: error vs h
                     if exacta_d1 is not None or exacta_d2 is not None:
@@ -1154,7 +1424,7 @@ if algoritmo == "Diferencias Finitas":
                             "sí" if res_n["nodos_equiespaciados"] else "no",
                         )
                         df_tri = pd.DataFrame(res_n["filas_tabla"])
-                        st.dataframe(df_tri, hide_index=True, use_container_width=True)
+                        st.dataframe(_fmt_iter_df(df_tri), hide_index=True, use_container_width=True)
                         st.caption("Columnas div_k = orden k de diferencia dividida en la fila correspondiente.")
 
                     with st.container(border=True):
@@ -1422,6 +1692,950 @@ if algoritmo == "Integración Numérica":
         _formulas_panel("Integración Numérica")
 
 
+# ── ECUACIONES DIFERENCIALES (EDO) ─────────────────────────────────────────
+if algoritmo == "Ecuaciones Diferenciales (EDO)":
+    main_col, side_col = st.columns([2.3, 1.0], gap="large")
+    with main_col:
+        with st.container(border=True):
+            st.subheader("Ecuaciones Diferenciales Ordinarias (PVI)")
+            st.caption("Resuelve el Problema de Valor Inicial $y' = f(t, y)$ con $y(t_0) = y_0$.")
+            
+            with st.form("edo_form"):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    expr_f = st.text_input("f(t, y)", "y - t**2 + 1", key="f_edo")
+                    t0 = st.number_input("t₀", value=0.0, format="%.4f", key="t0_edo")
+                    y0 = st.number_input("y₀", value=0.5, format="%.4f", key="y0_edo")
+                with c2:
+                    tf = st.number_input("t_f", value=2.0, format="%.4f", key="tf_edo")
+                    h = st.number_input("Tamaño de paso (h)", value=0.2, min_value=1e-5, format="%.5f", key="h_edo")
+                with c3:
+                    metodo = st.selectbox("Método", ["Euler", "RK2 (Punto Medio)", "RK2 (Heun)", "RK2 (Ralston)", "RK4", "Comparar Todos"])
+                
+                run_edo = st.form_submit_button("Resolver", type="primary")
+
+        if run_edo:
+            if not expr_f.strip():
+                st.error("Debes ingresar f(t, y).")
+            elif tf <= t0:
+                st.error("El tiempo final (t_f) debe ser mayor a t₀.")
+            else:
+                try:
+                    f_fn_ty = make_fn_ty(expr_f)
+                    
+                    # Test evaluation to catch errors early
+                    try:
+                        _test_eval = f_fn_ty(t0, y0)
+                    except Exception:
+                        st.error("Error evaluando la función. Asegúrate de usar variables 't' e 'y'.")
+                        raise
+
+                    if metodo == "Comparar Todos":
+                        res_euler = euler_method(f_fn_ty, t0, y0, tf, h)
+                        res_rk2_heun = rk2_method(f_fn_ty, t0, y0, tf, h, variante="Heun")
+                        res_rk2_pm = rk2_method(f_fn_ty, t0, y0, tf, h, variante="Punto Medio")
+                        res_rk4 = rk4_method(f_fn_ty, t0, y0, tf, h)
+                        
+                        df_euler = pd.DataFrame({"t": res_euler["t_vals"], "y": res_euler["y_vals"], "Metodo": "Euler"})
+                        df_heun = pd.DataFrame({"t": res_rk2_heun["t_vals"], "y": res_rk2_heun["y_vals"], "Metodo": "RK2 (Heun)"})
+                        df_pm = pd.DataFrame({"t": res_rk2_pm["t_vals"], "y": res_rk2_pm["y_vals"], "Metodo": "RK2 (Punto Medio)"})
+                        df_rk4 = pd.DataFrame({"t": res_rk4["t_vals"], "y": res_rk4["y_vals"], "Metodo": "RK4"})
+                        
+                        df_all = pd.concat([df_euler, df_heun, df_pm, df_rk4], ignore_index=True)
+                        
+                        with st.container(border=True):
+                            st.markdown("### Comparación de Métodos")
+                            chart = alt.Chart(df_all).mark_line(point=True).encode(
+                                x=alt.X("t:Q", title="Tiempo (t)"),
+                                y=alt.Y("y:Q", title="Solución (y)"),
+                                color="Metodo:N",
+                                tooltip=["t", "y", "Metodo"]
+                            ).properties(height=400).interactive()
+                            st.altair_chart(chart, use_container_width=True)
+                            
+                    else:
+                        if metodo == "Euler":
+                            res = euler_method(f_fn_ty, t0, y0, tf, h)
+                        elif metodo == "RK2 (Punto Medio)":
+                            res = rk2_method(f_fn_ty, t0, y0, tf, h, variante="Punto Medio")
+                        elif metodo == "RK2 (Heun)":
+                            res = rk2_method(f_fn_ty, t0, y0, tf, h, variante="Heun")
+                        elif metodo == "RK2 (Ralston)":
+                            res = rk2_method(f_fn_ty, t0, y0, tf, h, variante="Ralston")
+                        elif metodo == "RK4":
+                            res = rk4_method(f_fn_ty, t0, y0, tf, h)
+                            
+                        df_res = pd.DataFrame({"t_n": res["t_vals"], "y_n": res["y_vals"]})
+                        
+                        with st.container(border=True):
+                            c1r, c2r = st.columns(2)
+                            c1r.metric("Método Utilizado", res["metodo"])
+                            c2r.metric(f"Valor Final y({tf})", f"{df_res['y_n'].iloc[-1]:.6f}")
+
+                        with st.container(border=True):
+                            st.markdown("### Gráfica de la Solución")
+                            chart = alt.Chart(df_res).mark_line(point=True, color="#d946ef").encode(
+                                x=alt.X("t_n:Q", title="Tiempo (t)"),
+                                y=alt.Y("y_n:Q", title="Solución (y)"),
+                                tooltip=["t_n", "y_n"]
+                            ).properties(height=350).interactive()
+                            st.altair_chart(chart, use_container_width=True)
+                            
+                        with st.container(border=True):
+                            st.markdown("### Tabla de Iteraciones")
+                            st.dataframe(_fmt_iter_df(df_res, decimals=6), hide_index=True, use_container_width=True)
+                            
+                except Exception as e:
+                    if "t_n" not in str(e):
+                        st.error(str(e))
+
+    with side_col:
+        _formulas_panel("Ecuaciones Diferenciales (EDO)")
+
+
+# ── SIMULACIÓN SIR (EPIDEMIA) ──────────────────────────────────────────────
+if algoritmo == "Simulación SIR (Epidemia)":
+    main_col, side_col = st.columns([2.3, 1.0], gap="large")
+    with main_col:
+        with st.container(border=True):
+            st.subheader("🦠 Simulación Epidemiológica — Modelo SIR")
+            st.caption(
+                "Simula la propagación de una enfermedad en una población usando "
+                "el sistema de ecuaciones diferenciales SIR, resuelto con **Runge-Kutta de orden 4**."
+            )
+
+            with st.form("sir_form"):
+                st.markdown("#### Parámetros de la epidemia")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    N_pop = st.number_input("Población total (N)", value=10000, min_value=100, step=100, key="sir_N")
+                    I0_sir = st.number_input("Infectados iniciales (I₀)", value=10, min_value=1, step=1, key="sir_I0")
+                    R0_init_sir = st.number_input("Recuperados iniciales", value=0, min_value=0, step=1, key="sir_R0i")
+                with c2:
+                    beta_sir = st.number_input("β (tasa de contagio)", value=0.3, min_value=0.01, max_value=5.0, step=0.01, format="%.3f", key="sir_beta")
+                    gamma_sir = st.number_input("γ (tasa de recuperación)", value=0.1, min_value=0.01, max_value=5.0, step=0.01, format="%.3f", key="sir_gamma")
+                with c3:
+                    t_max_sir = st.number_input("Días a simular", value=160, min_value=10, step=10, key="sir_tmax")
+                    h_sir = st.number_input("Paso (h) en días", value=0.5, min_value=0.01, max_value=5.0, step=0.1, format="%.2f", key="sir_h")
+                    comparar_metodos_sir = st.checkbox("Comparar Euler vs RK4", value=False, key="sir_cmp")
+
+                run_sir = st.form_submit_button("Simular Epidemia", type="primary")
+
+        if run_sir:
+            try:
+                res_rk4 = sir_rk4(beta_sir, gamma_sir, N_pop, I0_sir, R0_init_sir, t_max_sir, h_sir)
+                metricas = calcular_metricas(res_rk4, beta_sir, gamma_sir, N_pop)
+
+                # ── Métricas principales ──────────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 📊 Métricas Clave")
+                    m1, m2, m3, m4 = st.columns(4)
+                    r0_val = metricas["R0"]
+                    m1.metric("R₀", f"{r0_val:.2f}", "Epidemia" if r0_val > 1 else "Se extingue")
+                    m2.metric("Pico de Infectados", f"{metricas['pico_infectados']:.0f}", f"{metricas['pico_pct']:.1f}% de N")
+                    m3.metric("Día del Pico", f"Día {metricas['dia_pico']:.0f}")
+                    m4.metric("Total Infectados", f"{metricas['total_infectados_pct']:.1f}%", f"Inmunidad rebaño: {metricas['umbral_rebano_pct']:.1f}%")
+
+                # ── Ecuaciones con valores reales ─────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 📐 Sistema de Ecuaciones Diferenciales (tu PVI)")
+                    st.caption("Problema de Valor Inicial resuelto con **Runge-Kutta de orden 4**:")
+                    st.latex(
+                        rf"\frac{{dS}}{{dt}} = -\frac{{{beta_sir}}} {{{N_pop}}} \cdot S(t) \cdot I(t)"
+                        rf"\quad,\quad S(0) = {N_pop - I0_sir - R0_init_sir}"
+                    )
+                    st.latex(
+                        rf"\frac{{dI}}{{dt}} = \frac{{{beta_sir}}}{{{N_pop}}} \cdot S(t) \cdot I(t) - {gamma_sir} \cdot I(t)"
+                        rf"\quad,\quad I(0) = {I0_sir}"
+                    )
+                    st.latex(
+                        rf"\frac{{dR}}{{dt}} = {gamma_sir} \cdot I(t)"
+                        rf"\quad,\quad R(0) = {R0_init_sir}"
+                    )
+                    st.latex(
+                        rf"\beta = {beta_sir},\quad \gamma = {gamma_sir},\quad "
+                        rf"R_0 = \frac{{\beta}}{{\gamma}} = {metricas['R0']:.2f},\quad "
+                        rf"h = {h_sir},\quad t \in [0,\,{t_max_sir}]"
+                    )
+
+                # ── Tabla de iteraciones RK4 ──────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 📋 Tabla de Iteraciones (RK4)")
+                    st.caption("Valores de S(t), I(t), R(t) calculados paso a paso con Runge-Kutta de orden 4.")
+                    import numpy as _np_tbl
+                    df_rk4_table = pd.DataFrame({
+                        "Paso": list(range(len(res_rk4["t"]))),
+                        "t (días)": [f"{v:.2f}" for v in res_rk4["t"]],
+                        "S(t)": [f"{v:.2f}" for v in res_rk4["S"]],
+                        "I(t)": [f"{v:.2f}" for v in res_rk4["I"]],
+                        "R(t)": [f"{v:.2f}" for v in res_rk4["R"]],
+                        "S+I+R": [f"{s+i+r:.0f}" for s, i, r in zip(res_rk4["S"], res_rk4["I"], res_rk4["R"])],
+                    })
+                    # Mostrar ~50 filas representativas
+                    _step_show = max(1, len(df_rk4_table) // 50)
+                    st.dataframe(df_rk4_table.iloc[::_step_show], hide_index=True, use_container_width=True, height=400)
+                    st.caption(f"Total de pasos RK4: **{len(res_rk4['t'])-1}** (mostrando cada {_step_show}). h = {h_sir} días.")
+
+                # ── Gráfico principal S/I/R ────────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 📈 Evolución de la Epidemia (RK4)")
+                    df_sir = pd.DataFrame({
+                        "Día": res_rk4["t"],
+                        "Susceptibles": res_rk4["S"],
+                        "Infectados": res_rk4["I"],
+                        "Recuperados": res_rk4["R"],
+                    })
+                    df_melt = df_sir.melt("Día", var_name="Grupo", value_name="Personas")
+
+                    color_scale = alt.Scale(
+                        domain=["Susceptibles", "Infectados", "Recuperados"],
+                        range=["#3b82f6", "#ef4444", "#22c55e"],
+                    )
+                    chart_sir = alt.Chart(df_melt).mark_line(strokeWidth=2.5).encode(
+                        x=alt.X("Día:Q", title="Tiempo (días)"),
+                        y=alt.Y("Personas:Q", title="Personas"),
+                        color=alt.Color("Grupo:N", scale=color_scale),
+                        tooltip=["Día", "Grupo", alt.Tooltip("Personas:Q", format=",.0f")],
+                    ).properties(height=420).interactive()
+
+                    # Línea del pico
+                    df_pico = pd.DataFrame({"x": [metricas["dia_pico"]]})
+                    rule_pico = alt.Chart(df_pico).mark_rule(
+                        color="#ef4444", strokeDash=[6, 3], strokeWidth=1.5
+                    ).encode(x="x:Q")
+                    label_pico = alt.Chart(df_pico).mark_text(
+                        align="left", dx=5, dy=-10, fontSize=11, color="#ef4444", fontWeight="bold"
+                    ).encode(x="x:Q", text=alt.value(f"Pico: día {metricas['dia_pico']:.0f}"))
+
+                    st.altair_chart(chart_sir + rule_pico + label_pico, use_container_width=True)
+
+                # ── Gráfico de Infectados (zoom) ──────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 🔴 Curva de Infectados (detalle)")
+                    df_inf = pd.DataFrame({"Día": res_rk4["t"], "Infectados": res_rk4["I"]})
+                    chart_inf = alt.Chart(df_inf).mark_area(
+                        color=alt.Gradient(
+                            gradient="linear",
+                            stops=[
+                                alt.GradientStop(color="#fecaca", offset=0),
+                                alt.GradientStop(color="#ef4444", offset=1),
+                            ],
+                            x1=1, x2=1, y1=1, y2=0,
+                        ),
+                        line={"color": "#dc2626", "strokeWidth": 2},
+                    ).encode(
+                        x=alt.X("Día:Q", title="Tiempo (días)"),
+                        y=alt.Y("Infectados:Q", title="Personas infectadas"),
+                        tooltip=["Día", alt.Tooltip("Infectados:Q", format=",.0f")],
+                    ).properties(height=300).interactive()
+                    st.altair_chart(chart_inf, use_container_width=True)
+
+                # ── Tabla de datos ────────────────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 📋 Tabla de Valores")
+                    # Mostrar cada N filas para no saturar
+                    step_display = max(1, len(df_sir) // 40)
+                    st.dataframe(
+                        df_sir.iloc[::step_display].style.format(
+                            {"Día": "{:.1f}", "Susceptibles": "{:,.0f}", "Infectados": "{:,.0f}", "Recuperados": "{:,.0f}"}
+                        ),
+                        hide_index=True, use_container_width=True,
+                    )
+
+                # ── Comparación Euler vs RK4 ──────────────────────────────
+                if comparar_metodos_sir:
+                    res_euler = sir_euler(beta_sir, gamma_sir, N_pop, I0_sir, R0_init_sir, t_max_sir, h_sir)
+                    with st.container(border=True):
+                        st.markdown("### ⚖️ Comparación: Euler vs RK4 (Infectados)")
+                        df_cmp = pd.concat([
+                            pd.DataFrame({"Día": res_euler["t"], "Infectados": res_euler["I"], "Método": "Euler"}),
+                            pd.DataFrame({"Día": res_rk4["t"], "Infectados": res_rk4["I"], "Método": "RK4"}),
+                        ], ignore_index=True)
+                        chart_cmp = alt.Chart(df_cmp).mark_line(strokeWidth=2).encode(
+                            x=alt.X("Día:Q", title="Tiempo (días)"),
+                            y=alt.Y("Infectados:Q", title="Personas infectadas"),
+                            color=alt.Color("Método:N", scale=alt.Scale(
+                                domain=["Euler", "RK4"], range=["#f59e0b", "#7c3aed"]
+                            )),
+                            strokeDash=alt.StrokeDash("Método:N", scale=alt.Scale(
+                                domain=["Euler", "RK4"], range=[[6, 3], [0]]
+                            )),
+                            tooltip=["Día", "Método", alt.Tooltip("Infectados:Q", format=",.0f")],
+                        ).properties(height=350).interactive()
+                        st.altair_chart(chart_cmp, use_container_width=True)
+
+                        # Diferencia en el pico
+                        met_euler = calcular_metricas(res_euler, beta_sir, gamma_sir, N_pop)
+                        diff_pico = abs(metricas["pico_infectados"] - met_euler["pico_infectados"])
+                        diff_dia = abs(metricas["dia_pico"] - met_euler["dia_pico"])
+                        st.caption(
+                            f"Diferencia en pico: **{diff_pico:,.0f} personas** | "
+                            f"Diferencia en día del pico: **{diff_dia:.1f} días** | "
+                            f"Con h = {h_sir}"
+                        )
+                        if diff_pico > 10:
+                            st.info(
+                                "💡 Euler acumula error numérico. "
+                                "Probá aumentar h (e.g. h=2) para ver cómo RK4 mantiene precisión mientras Euler diverge."
+                            )
+
+                # ── Interpretación ────────────────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 🧠 Interpretación")
+                    if r0_val > 1:
+                        st.warning(
+                            f"Con **R₀ = {r0_val:.2f}**, cada infectado contagia en promedio a "
+                            f"**{r0_val:.1f} personas**. La epidemia crece exponencialmente al inicio.\n\n"
+                            f"El **pico** ocurre en el **día {metricas['dia_pico']:.0f}** con "
+                            f"**{metricas['pico_infectados']:,.0f} infectados simultáneos** "
+                            f"({metricas['pico_pct']:.1f}% de la población).\n\n"
+                            f"Al final, el **{metricas['total_infectados_pct']:.1f}%** de la población "
+                            f"se infectó. Para lograr inmunidad de rebaño se necesita inmunizar al "
+                            f"**{metricas['umbral_rebano_pct']:.1f}%** de la población."
+                        )
+                    else:
+                        st.success(
+                            f"Con **R₀ = {r0_val:.2f} < 1**, la epidemia se extingue naturalmente. "
+                            f"Cada infectado contagia a menos de 1 persona en promedio."
+                        )
+
+                # ── Guardar en session_state ──────────────────────────────
+                import numpy as _np
+                st.session_state["_sir_res"] = res_rk4
+                st.session_state["_sir_met"] = metricas
+                st.session_state["_sir_Nval"] = N_pop
+                st.session_state["_sir_tmaxval"] = int(t_max_sir)
+                st.session_state["_sir_dfval"] = df_sir
+
+            except Exception as e:
+                st.error(f"Error en la simulación: {e}")
+
+        # ── Visualizaciones persistentes (fuera del if run_sir) ───
+        if all(k in st.session_state for k in ["_sir_res", "_sir_met", "_sir_Nval", "_sir_tmaxval", "_sir_dfval"]):
+            import numpy as _np
+            import time as _time
+            _res = st.session_state["_sir_res"]
+            _N = st.session_state["_sir_Nval"]
+            _tmax = st.session_state["_sir_tmaxval"]
+            _df_sir = st.session_state["_sir_dfval"]
+            _t_arr = _np.array(_res["t"])
+
+            with st.container(border=True):
+                st.markdown("### 🎛️ Explorador Visual")
+                dia_sel = st.slider("Día", 0, _tmax, 0, 1, key="sir_sl")
+                _idx = int(_np.argmin(_np.abs(_t_arr - dia_sel)))
+                _s, _i, _r = _res["S"][_idx], _res["I"][_idx], _res["R"][_idx]
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.metric("🔵 Susceptibles", f"{_s:,.0f}", f"{_s/_N*100:.1f}%")
+                mc2.metric("🔴 Infectados", f"{_i:,.0f}", f"{_i/_N*100:.1f}%")
+                mc3.metric("🟢 Recuperados", f"{_r:,.0f}", f"{_r/_N*100:.1f}%")
+                bd = pd.DataFrame([{"G": "Susceptibles", "P": _s/_N*100, "o": 1},
+                    {"G": "Infectados", "P": _i/_N*100, "o": 2},
+                    {"G": "Recuperados", "P": _r/_N*100, "o": 3}])
+                st.altair_chart(alt.Chart(bd).mark_bar(cornerRadius=4, height=40).encode(
+                    x=alt.X("P:Q", stack="zero", scale=alt.Scale(domain=[0,100]), axis=alt.Axis(title="%")),
+                    color=alt.Color("G:N", scale=alt.Scale(domain=["Susceptibles","Infectados","Recuperados"],
+                        range=["#3b82f6","#ef4444","#22c55e"]), legend=alt.Legend(orient="bottom")),
+                    order="o:Q", tooltip=["G", alt.Tooltip("P:Q", format=".1f")],
+                ).properties(height=60), use_container_width=True)
+
+            with st.container(border=True):
+                st.markdown(f"### 🏘️ Población — Día {dia_sel}")
+                st.caption("🔵 Sana  🔴 Infectada  🟢 Recuperada")
+                _gn = min(_N, 2500)
+                _sc = _gn / _N
+                _ns = max(0, int(round(_s * _sc)))
+                _ni = max(0, int(round(_i * _sc)))
+                _nr = max(0, _gn - _ns - _ni)
+                _clrs = ["#3b82f6"]*_ns + ["#ef4444"]*_ni + ["#22c55e"]*_nr
+                _perm = _np.random.RandomState(42).permutation(len(_clrs))
+                _clrs = [_clrs[j] for j in _perm]
+                _cg = int(_np.ceil(_np.sqrt(_gn)))
+                df_g = pd.DataFrame({"x": [j%_cg for j in range(len(_clrs))],
+                    "y": [j//_cg for j in range(len(_clrs))], "c": _clrs,
+                    "e": ["Sana" if c=="#3b82f6" else ("Infectada" if c=="#ef4444" else "Recuperada") for c in _clrs]})
+                st.altair_chart(alt.Chart(df_g).mark_square(size=12).encode(
+                    x=alt.X("x:Q", axis=None), y=alt.Y("y:Q", axis=None, sort="descending"),
+                    color=alt.Color("c:N", scale=None), tooltip=["e"],
+                ).properties(height=350).configure_view(strokeWidth=0), use_container_width=True)
+
+            with st.container(border=True):
+                st.markdown("### 🎬 Animación de la Epidemia")
+                st.caption("Presioná ▶️ y mirá cómo el virus se propaga por la población día a día.")
+                _play = st.button("▶️ Reproducir Animación", key="sir_anim")
+                _ph_grid = st.empty()
+                _ph_bar = st.empty()
+                _ph_text = st.empty()
+                _nf = min(60, len(_res["t"]))
+                _fi = _np.linspace(0, len(_res["t"])-1, _nf, dtype=int)
+                _gn = min(_N, 1600)
+                _sc = _gn / _N
+                _cg = int(_np.ceil(_np.sqrt(_gn)))
+                _base_perm = _np.random.RandomState(42).permutation(_gn)
+                if _play:
+                    for idx_f in _fi:
+                        _tc = _res["t"][idx_f]
+                        _sf = _res["S"][idx_f]
+                        _if_ = _res["I"][idx_f]
+                        _rf = _res["R"][idx_f]
+                        _ns = max(0, int(round(_sf * _sc)))
+                        _ni = max(0, int(round(_if_ * _sc)))
+                        _nr = max(0, _gn - _ns - _ni)
+                        _clrs = ["#3b82f6"]*_ns + ["#ef4444"]*_ni + ["#22c55e"]*_nr
+                        _clrs = [_clrs[j] for j in _base_perm[:len(_clrs)]]
+                        df_g = pd.DataFrame({"x":[j%_cg for j in range(len(_clrs))],
+                            "y":[j//_cg for j in range(len(_clrs))], "c":_clrs})
+                        _ph_grid.altair_chart(alt.Chart(df_g).mark_square(size=14).encode(
+                            x=alt.X("x:Q", axis=None), y=alt.Y("y:Q", axis=None, sort="descending"),
+                            color=alt.Color("c:N", scale=None),
+                        ).properties(height=320, title=f"Día {_tc:.0f}"
+                        ).configure_view(strokeWidth=0), use_container_width=True)
+                        _ad = pd.DataFrame([{"G":"Susceptibles","P":_sf},
+                            {"G":"Infectados","P":_if_},{"G":"Recuperados","P":_rf}])
+                        _ph_bar.altair_chart(alt.Chart(_ad).mark_bar(cornerRadius=6).encode(
+                            x=alt.X("P:Q", scale=alt.Scale(domain=[0,_N]), axis=alt.Axis(format=",.0f")),
+                            y=alt.Y("G:N", sort=["Susceptibles","Infectados","Recuperados"], axis=alt.Axis(title="")),
+                            color=alt.Color("G:N", scale=alt.Scale(domain=["Susceptibles","Infectados","Recuperados"],
+                                range=["#3b82f6","#ef4444","#22c55e"]), legend=None),
+                        ).properties(height=100), use_container_width=True)
+                        _ph_text.markdown(f"### Día {_tc:.0f}\n🔵 Sanos: **{_sf:,.0f}** | 🔴 Infectados: **{_if_:,.0f}** | 🟢 Recuperados: **{_rf:,.0f}**")
+                        _time.sleep(0.12)
+                    st.success("✅ Animación completada")
+
+            with st.container(border=True):
+                st.markdown("### 📊 Áreas Apiladas")
+                df_st = _df_sir.melt("Día", var_name="Grupo", value_name="Personas")
+                st.altair_chart(alt.Chart(df_st).mark_area().encode(
+                    x=alt.X("Día:Q", title="Días"), y=alt.Y("Personas:Q", stack="zero"),
+                    color=alt.Color("Grupo:N", scale=alt.Scale(domain=["Susceptibles","Infectados","Recuperados"],
+                        range=["#3b82f6","#ef4444","#22c55e"])),
+                    order=alt.Order("Grupo:N", sort="descending"),
+                    tooltip=["Día","Grupo",alt.Tooltip("Personas:Q",format=",.0f")],
+                ).properties(height=350).interactive(), use_container_width=True)
+
+            with st.container(border=True):
+                st.markdown("### 🔄 Diagrama de Fase (S vs I)")
+                df_ph = pd.DataFrame({"S": _res["S"], "I": _res["I"], "Día": _res["t"]})
+                _ln = alt.Chart(df_ph).mark_line(strokeWidth=2, color="#a855f7").encode(
+                    x=alt.X("S:Q", title="Susceptibles"), y=alt.Y("I:Q", title="Infectados"),
+                    tooltip=["S","I","Día"]).properties(height=350)
+                df_ep = pd.DataFrame({"S":[_res["S"][0],_res["S"][-1]],"I":[_res["I"][0],_res["I"][-1]],
+                    "l":["Inicio","Fin"],"c":["#22d3ee","#f97316"]})
+                _p2 = alt.Chart(df_ep).mark_point(size=120, filled=True, stroke="white", strokeWidth=1.5).encode(
+                    x="S:Q", y="I:Q", color=alt.Color("c:N", scale=None), tooltip=["l","S","I"])
+                _lb = alt.Chart(df_ep).mark_text(dx=10, dy=-10, fontSize=11, fontWeight="bold").encode(
+                    x="S:Q", y="I:Q", text="l:N", color=alt.Color("c:N", scale=None))
+                st.altair_chart((_ln+_p2+_lb).interactive(), use_container_width=True)
+
+    with side_col:
+        _formulas_panel("Simulación SIR (Epidemia)")
+        with st.container(border=True):
+            st.markdown("### 💡 Ejemplos de β y γ")
+            st.caption("**Gripe:** β ≈ 0.3, γ ≈ 0.14 (R₀ ≈ 2.1)")
+            st.caption("**COVID-19:** β ≈ 0.4, γ ≈ 0.07 (R₀ ≈ 5.7)")
+            st.caption("**Sarampión:** β ≈ 1.8, γ ≈ 0.14 (R₀ ≈ 13)")
+            st.caption("**Enfermedad leve:** β ≈ 0.05, γ ≈ 0.1 (R₀ ≈ 0.5)")
+            st.divider()
+            st.markdown("### 🔑 Parámetros clave")
+            st.caption("**β**: probabilidad de contagio por contacto × contactos diarios.")
+            st.caption("**γ**: 1/γ = días promedio de enfermedad. Ej: γ=0.1 → 10 días enfermo.")
+            st.caption("**R₀ = β/γ**: umbral epidémico. R₀ > 1 → brote.")
+
+            st.caption("**R₀ = β/γ**: umbral epidémico. R₀ > 1 → brote.")
+
+
+from rocket_engine_solid import Rocket, RocketStage, EarthRocketPhysics, RK4Integrator, SimulationEngine
+
+# ── LANZAMIENTO COHETE 3D ──────────────────────────────────────────────────
+if algoritmo == "Lanzamiento Cohete 3D":
+    # ── Definición de Presets ──
+    PRESETS = {
+        "Falcon 9 (SpaceX)": {
+            "stages": [
+                {"name": "Etapa 1", "T": 7607000, "m_p": 395700, "m_d": 25600, "md": 2500},
+                {"name": "Etapa 2", "T": 934000, "m_p": 92670, "m_d": 3900, "md": 260}
+            ],
+            "pay": 5000, "bal": 600
+        },
+        "Apolo 11 (Misión Lunar)": {
+            "stages": [
+                {"name": "S-IC (Etapa 1)", "T": 34000000, "m_p": 2100000, "m_d": 130000, "md": 13000},
+                {"name": "S-II (Etapa 2)", "T": 4400000, "m_p": 450000, "m_d": 36000, "md": 1100},
+                {"name": "S-IVB (Etapa 3 / TLI)", "T": 1000000, "m_p": 110000, "m_d": 10000, "md": 230}
+            ],
+            "pay": 45000, "bal": 300000 # 3.5 días aprox
+        },
+        "Artemis 2 (SLS/Orion)": {
+            "stages": [
+                {"name": "Boosters + Core (Etapa 1)", "T": 39100000, "m_p": 1600000, "m_d": 195000 + 98000, "md": 12000},
+                {"name": "Core Stage (Etapa 2)", "T": 9000000, "m_p": 600000, "m_d": 98000, "md": 2000},
+                {"name": "ICPS (Etapa 3 / TLI)", "T": 110100, "m_p": 26850, "m_d": 3800, "md": 24.1}
+            ],
+            "pay": 26520, "bal": 300000
+        },
+        "Personalizado": None
+    }
+
+    main_col, side_col = st.columns([2.3, 1.0], gap="large")
+    with main_col:
+        st.markdown("### 🚀 Mission Control (Versión PRO)")
+        
+        # Selección de Preset
+        preset_choice = st.selectbox("Seleccionar Plantilla de Cohete", list(PRESETS.keys()))
+        config = PRESETS[preset_choice]
+
+        with st.form("rocket_form"):
+            if config:
+                st.info(f"Configuración cargada: {preset_choice} ({len(config['stages'])} etapas)")
+                for i, s in enumerate(config['stages']):
+                    with st.expander(f"Resumen {s['name']}"):
+                        st.write(f"Empuje: {s['T']:,} N | Propelente: {s['m_p']:,} kg | Burn Rate: {s['md']} kg/s")
+            
+            c1, c2, c3 = st.columns(3)
+            
+            if not config:
+                with c1:
+                    st.markdown("**Etapa 1 (Booster)**")
+                    T1 = st.number_input("Empuje (N)", value=7600000, step=100000)
+                    m1_prop = st.number_input("Masa Propelente (kg)", value=395700)
+                    m1_dry = st.number_input("Masa Seca (kg)", value=25600)
+                    m_dot1 = st.number_input("Tasa Consumo (kg/s)", value=2500)
+                with c2:
+                    st.markdown("**Etapa 2 (Orbital)**")
+                    T2 = st.number_input("Empuje (N) ", value=934000, step=10000)
+                    m2_prop = st.number_input("Masa Propelente (kg) ", value=92670)
+                    m2_dry = st.number_input("Masa Seca (kg) ", value=3900)
+                    m_dot2 = st.number_input("Tasa Consumo (kg/s) ", value=260)
+                with c3:
+                    st.markdown("**Carga Útil & Sim**")
+                    m_payload = st.number_input("Masa Carga Útil (kg)", value=5000)
+                    t_bal = st.number_input("Vuelo Balístico (s)", value=600)
+                    h_step = st.slider("Paso h (s)", 0.1, 2.0, 0.5)
+            else:
+                m_payload = config["pay"]
+                t_bal = config["bal"]
+                h_step = st.slider("Paso h (s)", 0.1, 2.0, 0.5)
+
+            st.divider()
+            st.markdown("**Visual y Cámaras**")
+            cv1, cv2, cv3 = st.columns(3)
+            num_satellites = cv1.slider("Satélites", 0, 100, 30)
+            show_moon = cv2.checkbox("Incluir la Luna", value=True)
+            camera_mode = cv3.radio("Modo de Cámara", ["Libre", "Cabina", "Persecución"])
+            
+            c_row2 = st.columns(2)
+            playback_speed = c_row2[0].slider("Velocidad de Animación", 0.1, 5.0, 1.0, step=0.1)
+            show_orbits = c_row2[1].checkbox("Mostrar Órbitas", value=True)
+                
+            run_rocket = st.form_submit_button("🚀 INICIAR LANZAMIENTO", type="primary")
+
+        if run_rocket:
+            import numpy as np
+            
+            # Aplicando Patrón Builder/Strategy con la clase SOLID
+            rocket = Rocket(payload_mass=m_payload)
+            
+            if config:
+                for s in config['stages']:
+                    rocket.add_stage(RocketStage(s['name'], s['T'], s['m_p'], s['m_d'], s['md']))
+            else:
+                # Custom fallback
+                rocket.add_stage(RocketStage("Etapa 1", T1, m1_prop, m1_dry, m_dot1))
+                rocket.add_stage(RocketStage("Etapa 2", T2, m2_prop, m2_dry, m_dot2))
+            
+            physics = EarthRocketPhysics()
+            integrator = RK4Integrator()
+            engine = SimulationEngine(rocket, physics, integrator)
+            
+            try:
+                res = engine.run(h_step=h_step, t_ballistic=t_bal)
+                
+                # Metrics con manejo seguro de NaN/Inf
+                z_vals = res['z']
+                v_vals = np.sqrt(res['vx']**2 + res['vz']**2)
+                
+                # Filtrar valores no finitos para las métricas
+                z_clean = z_vals[np.isfinite(z_vals)]
+                v_clean = v_vals[np.isfinite(v_vals)]
+                
+                max_alt = np.max(z_clean) / 1000 if len(z_clean) > 0 else 0
+                max_vel = np.max(v_clean) if len(v_clean) > 0 else 0
+                
+                with st.container(border=True):
+                    mc1, mc2, mc3 = st.columns(3)
+                    mc1.metric("Apogeo", f"{max_alt:,.1f} km")
+                    mc2.metric("Velocidad Máxima", f"{max_vel:,.0f} m/s", f"Mach {max_vel/343:.1f}" if max_vel > 0 else "0")
+                    mc3.metric("Masa Final", f"{res['m'][-1]:.0f} kg")
+                
+                # --- Three.js Component ---
+                Re_m = 6371000.0
+                phi = res['x'] / Re_m
+                X_3d = (Re_m + res['z']) * np.sin(phi)
+                Y_3d = np.zeros_like(X_3d)
+                Z_3d = (Re_m + res['z']) * np.cos(phi)
+
+                # --- Submuestreo Agresivo para Optimización (Reducir Lag) ---
+                trajectory_data = []
+                n_total = len(X_3d)
+                # Máximo de 2000 puntos para evitar saturar el navegador
+                max_points = 2000
+                skip_rate = max(1, n_total // max_points)
+                
+                for i in range(n_total):
+                    # Guardamos frames críticos (despegue)
+                    is_critical = (res['t'][i] < 60) 
+                    
+                    if is_critical or (i % skip_rate == 0) or (i == n_total - 1):
+                        trajectory_data.append({
+                            'x': float(X_3d[i]), 'y': float(Y_3d[i]), 'z': float(Z_3d[i]),
+                            'f': res['etapa'][i], 'v': float(np.sqrt(res['vx'][i]**2 + res['vz'][i]**2)),
+                            't': float(res['t'][i])
+                        })
+
+                three_js_code = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body {{ margin: 0; background-color: #000; overflow: hidden; }}
+                        #info {{
+                            position: absolute; top: 10px; left: 10px; color: white;
+                            font-family: 'Segoe UI', sans-serif; pointer-events: none;
+                            text-shadow: 1px 1px 2px black; font-size: 13px;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div id="info">
+                        <b>MISSION CONTROL</b><br>
+                        Altitud: <span id="alt">0</span> km | Vel: <span id="vel">0</span> m/s<br>
+                        Fase: <span id="stage">-</span>
+                    </div>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+                    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+                    <script>
+                        const trajectory = {trajectory_data};
+                        const numSats = {num_satellites};
+                        const showMoon = {str(show_moon).lower()};
+                        const showOrbits = {str(show_orbits).lower()};
+                        const cameraMode = "{camera_mode}";
+                        const playbackSpeed = {playback_speed};
+                        
+                        let scene, camera, renderer, controls;
+                        let earth, rocket, moon, rocketTrail, exhaust;
+                        let rocketParts = []; 
+                        let currentStageName = "";
+                        let debrisList = [];
+                        let satellites = [];
+                        let animIndex = 0; // Usar float para velocidad variable
+                        const RE = 6371; 
+                        
+                        function init() {{
+                            scene = new THREE.Scene();
+                            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000000);
+                            
+                            renderer = new THREE.WebGLRenderer({{ antialias: true }});
+                            renderer.setSize(window.innerWidth, window.innerHeight);
+                            document.body.appendChild(renderer.domElement);
+                            
+                            controls = new THREE.OrbitControls(camera, renderer.domElement);
+                            controls.enableDamping = true;
+                            
+                            scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+                            const sun = new THREE.DirectionalLight(0xffffff, 1.8);
+                            sun.position.set(RE*20, RE*10, RE*20); 
+                            scene.add(sun);
+                            
+                            const loader = new THREE.TextureLoader();
+                            
+                            // Tierra
+                            earth = new THREE.Mesh(
+                                new THREE.SphereGeometry(RE, 64, 64),
+                                new THREE.MeshPhongMaterial({{ color: 0x224488, shininess: 10 }})
+                            );
+                            loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg', (tex) => {{
+                                earth.material.map = tex;
+                                earth.material.needsUpdate = true;
+                            }});
+                            scene.add(earth);
+                            
+                            // Atmósfera
+                            scene.add(new THREE.Mesh(
+                                new THREE.SphereGeometry(RE * 1.015, 64, 64),
+                                new THREE.MeshBasicMaterial({{ color: 0x00aaff, transparent: true, opacity: 0.1, side: THREE.BackSide }})
+                            ));
+
+                            // Luna Dinámica (Posicionada al final de la trayectoria)
+                            if (showMoon) {{
+                                moon = new THREE.Mesh(
+                                    new THREE.SphereGeometry(1737, 32, 32), // Radio real 1737 km
+                                    new THREE.MeshPhongMaterial({{ color: 0xaaaaaa }})
+                                );
+                                loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg', (tex) => {{
+                                    moon.material.map = tex;
+                                    moon.material.needsUpdate = true;
+                                }});
+                                
+                                // Ubicar la luna a la distancia real exacta: 384,400 km
+                                moon.position.set(0, 0, 384400);
+                                scene.add(moon);
+                            }}
+
+                            // Estrellas
+                            const starsPos = [];
+                            for(let i=0; i<25000; i++) {{
+                                starsPos.push((Math.random()-0.5)*RE*600, (Math.random()-0.5)*RE*600, (Math.random()-0.5)*RE*600);
+                            }}
+                            const starsGeom = new THREE.BufferGeometry();
+                            starsGeom.setAttribute('position', new THREE.Float32BufferAttribute(starsPos, 3));
+                            scene.add(new THREE.Points(starsGeom, new THREE.PointsMaterial({{ color: 0xffffff, size: 2 }})));
+                            
+                            // COHETE DINÁMICO
+                            rocket = new THREE.Group();
+                            const stagesFound = [...new Set(trajectory.map(p => p.f))];
+                            stagesFound.forEach((name, i) => {{
+                                const part = new THREE.Group();
+                                part.userData.name = name;
+                                if (name.includes("Carga") || name.includes("Orion")) {{
+                                    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.2, 16), new THREE.MeshStandardMaterial({{ color: 0xffffff, metalness: 0.4 }}));
+                                    nose.position.y = 2.0; part.add(nose);
+                                }} else {{
+                                    const h = 2.0;
+                                    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, h, 16), new THREE.MeshStandardMaterial({{ color: 0xcccccc, metalness: 0.6 }}));
+                                    body.position.y = (stagesFound.length - 2 - i) * h;
+                                    part.add(body);
+                                    if (i === 0) {{
+                                        const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.5, 12), new THREE.MeshStandardMaterial({{ color: 0x111111 }}));
+                                        eng.position.y = body.position.y - 1.25; part.add(eng);
+                                    }}
+                                }}
+                                rocketParts.push(part); rocket.add(part);
+                            }});
+
+                            exhaust = new THREE.Mesh(
+                                new THREE.ConeGeometry(0.35, 3.0, 12),
+                                new THREE.MeshBasicMaterial({{ color: 0xffaa00, transparent: true, opacity: 0.8 }})
+                            );
+                            exhaust.position.y = -4.5; exhaust.rotation.x = Math.PI;
+                            rocket.add(exhaust);
+
+                            rocket.rotateX(Math.PI/2); 
+                            scene.add(rocket);
+                            rocketTrail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({{ color: 0xffaa00, linewidth: 2 }}));
+                            scene.add(rocketTrail);
+                            
+                            if (cameraMode === "Libre") {{
+                                camera.position.set(RE * 0.1, RE * 0.1, RE * 1.05);
+                                camera.lookAt(0, 0, RE);
+                            }}
+
+                            for(let i=0; i<numSats; i++) {{
+                                const s = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.3), new THREE.MeshStandardMaterial({{ color: 0xcccccc }}));
+                                const r = RE + 300 + Math.random() * 2500;
+                                const sp = 0.0003 + Math.random() * 0.0008;
+                                const ang = Math.random() * Math.PI * 2;
+                                const inc = (Math.random() - 0.5) * Math.PI * 0.7;
+                                satellites.push({{ m: s, r: r, sp: sp, ang: ang, inc: inc }});
+                                scene.add(s);
+                                if(showOrbits) {{
+                                    const o = new THREE.Mesh(new THREE.TorusGeometry(r, 0.05, 2, 100), new THREE.MeshBasicMaterial({{ color: 0xffffff, transparent: true, opacity: 0.1 }}));
+                                    o.rotation.x = Math.PI/2; o.rotation.y = inc; scene.add(o);
+                                }}
+                            }}
+                            animate();
+                        }}
+                        
+                        function animate() {{
+                            requestAnimationFrame(animate);
+                            const idx = Math.floor(animIndex);
+
+                            if (idx < trajectory.length) {{
+                                const p = trajectory[idx];
+                                const x = p.x/1000, y = p.y/1000, z = p.z/1000;
+                                rocket.position.set(x, y, z);
+                                
+                                let forward = new THREE.Vector3();
+                                if (idx > 0) {{
+                                    const prev = trajectory[idx-1];
+                                    forward.set(x - prev.x/1000, y - prev.y/1000, z - prev.z/1000).normalize();
+                                }} else {{
+                                    forward.set(x, y, z).normalize();
+                                }}
+                                const target = new THREE.Vector3(x, y, z).add(forward);
+                                rocket.lookAt(target);
+
+                                // Órbita Lunar (Traslación Real)
+                                if (moon) {{
+                                    const orbitalPeriod = 2358720; // 27.3 días en seg
+                                    const moonAngle = (p.t / orbitalPeriod) * Math.PI * 2;
+                                    const moonDist = 384400;
+                                    moon.position.x = moonDist * Math.sin(moonAngle);
+                                    moon.position.z = moonDist * Math.cos(moonAngle);
+                                    moon.rotation.y += 0.001;
+                                }}
+
+                                if (p.f.includes("Carga") || p.f.includes("Orion")) {{
+                                    exhaust.visible = false;
+                                }} else {{
+                                    exhaust.visible = true;
+                                    exhaust.scale.set(1, 0.8 + Math.random() * 0.4, 1);
+                                }}
+
+                                if (p.f !== currentStageName) {{
+                                    rocketParts.forEach(part => {{
+                                        if (part.parent === rocket && part.userData.name !== p.f && !p.f.includes(part.userData.name) && currentStageName !== "") {{
+                                            if (trajectory.findIndex(tp => tp.f === part.userData.name) < trajectory.findIndex(tp => tp.f === p.f)) {{
+                                                separatePart(part, forward);
+                                            }}
+                                        }}
+                                    }});
+                                    currentStageName = p.f;
+                                }}
+
+                                let shake = new THREE.Vector3(0,0,0);
+                                if (!p.f.includes("Carga") && !p.f.includes("Orion")) {{
+                                    const alt = Math.sqrt(x*x+y*y+z*z) - RE;
+                                    const shakeFactor = Math.max(0, 0.4 * (1 - alt/250));
+                                    shake.set((Math.random()-0.5)*shakeFactor, (Math.random()-0.5)*shakeFactor, (Math.random()-0.5)*shakeFactor);
+                                }}
+
+                                if (cameraMode === "Cabina") {{
+                                    controls.enabled = false;
+                                    camera.position.copy(rocket.position).addScaledVector(forward, 2.5).add(shake);
+                                    camera.lookAt(rocket.position.clone().addScaledVector(forward, 10));
+                                }} else if (cameraMode === "Persecución") {{
+                                    controls.enabled = false;
+                                    // Offset de cámara mejorado para evitar jitter
+                                    const camOffset = forward.clone().multiplyScalar(-25).add(new THREE.Vector3(0, 8, 0));
+                                    camera.position.lerp(rocket.position.clone().add(camOffset).add(shake), 0.1);
+                                    camera.lookAt(rocket.position);
+                                }} else {{
+                                    controls.enabled = true;
+                                    controls.update();
+                                }}
+
+                                const points = [];
+                                const start = Math.max(0, idx - 1000);
+                                for(let i=start; i<=idx; i++) {{
+                                    points.push(new THREE.Vector3(trajectory[i].x/1000, trajectory[i].y/1000, trajectory[i].z/1000));
+                                }}
+                                rocketTrail.geometry.setFromPoints(points);
+                                
+                                document.getElementById('alt').innerText = (Math.sqrt(x*x+y*y+z*z)-RE).toFixed(1);
+                                document.getElementById('stage').innerText = p.f;
+                                
+                                animIndex += playbackSpeed;
+                            }} else {{
+                                controls.enabled = true;
+                                controls.update();
+                            }}
+                            
+                            debrisList.forEach(d => {{
+                                d.mesh.position.add(d.vel);
+                                d.mesh.rotation.x += 0.01; d.mesh.rotation.z += 0.005;
+                            }});
+
+                            if (moon) moon.rotation.y += 0.001;
+                            satellites.forEach(s => {{
+                                s.ang += s.sp;
+                                s.m.position.set(s.r*Math.cos(s.ang), s.r*Math.sin(s.ang)*Math.sin(s.inc), s.r*Math.sin(s.ang)*Math.cos(s.inc));
+                            }});
+                            earth.rotation.y += 0.0005;
+                            renderer.render(scene, camera);
+                        }}
+                            function separatePart(part, forward) {{
+                            if (!part || !part.parent) return;
+                            const worldPos = new THREE.Vector3();
+                            const worldQuat = new THREE.Quaternion();
+                            part.getWorldPosition(worldPos);
+                            part.getWorldQuaternion(worldQuat);
+                            
+                            rocket.remove(part);
+                            scene.add(part);
+                            part.position.copy(worldPos);
+                            part.quaternion.copy(worldQuat);
+                            
+                            debrisList.push({{
+                                mesh: part,
+                                vel: forward.clone().multiplyScalar(-0.2).add(new THREE.Vector3((Math.random()-0.5)*0.05, -0.1, 0))
+                            }});
+                        }}
+                        init();
+                    </script>
+                </body>
+                </html>
+                """
+                st.components.v1.html(three_js_code, height=600)
+
+                # --- Mapa Orbital 2D (Top-Down) ---
+                with st.container(border=True):
+                    st.markdown("### 🗺️ Mapa Orbital 2D (Cenital)")
+                    st.caption("Visualización del sistema Tierra-Luna a escala real.")
+                    
+                    # Generar datos del mapa 2D
+                    # Tierra
+                    tierra_2d = pd.DataFrame({'x': [0], 'z': [0], 'label': ['Tierra']})
+                    
+                    # Luna (posición final en la simulación para referencia)
+                    t_final = res['t'][-1]
+                    orbital_period = 2358720
+                    moon_angle = (t_final / orbital_period) * np.pi * 2
+                    moon_dist = 384400
+                    luna_x = moon_dist * np.sin(moon_angle)
+                    luna_z = moon_dist * np.cos(moon_angle)
+                    luna_2d = pd.DataFrame({'x': [luna_x], 'z': [luna_z], 'label': ['Luna']})
+                    
+                    # Trayectoria Cohete
+                    traj_2d = pd.DataFrame({
+                        'x': res['x'] / 1000, 
+                        'z': (6371 + res['z'] / 1000) * np.cos(res['x'] / 6371000.0) - 6371, # Proyección simple
+                        'Fase': res['etapa']
+                    })
+                    # Corrección de trayectoria para mapa top-down real (X-Z orbital)
+                    phi_map = (res['x'] / 1000) / 6371.0
+                    r_map = 6371 + (res['z'] / 1000)
+                    traj_real_2d = pd.DataFrame({
+                        'x': r_map * np.sin(phi_map),
+                        'z': r_map * np.cos(phi_map),
+                        'Fase': res['etapa']
+                    })
+
+                    # Gráfico Altair
+                    base = alt.Chart(traj_real_2d).mark_line().encode(
+                        x=alt.X('x:Q', title="X (km)", scale=alt.Scale(domain=[-450000, 450000])),
+                        y=alt.Y('z:Q', title="Z (km)", scale=alt.Scale(domain=[-450000, 450000])),
+                        color='Fase:N'
+                    )
+                    
+                    c_tierra = alt.Chart(tierra_2d).mark_point(size=200, color='blue', filled=True).encode(x='x', y='z')
+                    c_luna = alt.Chart(luna_2d).mark_point(size=100, color='gray', filled=True).encode(x='x', y='z')
+                    
+                    st.altair_chart((base + c_tierra + c_luna).properties(height=600), use_container_width=True)
+                    
+                with st.container(border=True):
+                    st.markdown("### 📉 Evolución de Variables")
+                    df_res = pd.DataFrame({
+                        'Tiempo (s)': res['t'],
+                        'Altitud (m)': res['z'],
+                        'Dist. Horizontal (m)': res['x'],
+                        'Vel. Vertical (m/s)': res['vz'],
+                        'Vel. Horizontal (m/s)': res['vx'],
+                        'Masa (kg)': res['m'],
+                        'Fase': res['etapa']
+                    })
+                    st.dataframe(df_res.iloc[::max(1, len(df_res)//100)], hide_index=True, use_container_width=True)
+                    
+            except Exception as e:
+                st.error(f"Error en la simulación: {e}")
+
+    with side_col:
+        _formulas_panel("Lanzamiento Cohete 3D")
+        with st.container(border=True):
+            st.markdown("### 💡 Fases de Vuelo")
+            st.caption("**1. Ignición:** Todo el peso. Fuerte empuje.")
+            st.caption("**2. Gravity Turn:** El cohete comienza a inclinarse (pitch) para ganar velocidad horizontal.")
+            st.caption("**3. Separación (MECO):** Se apaga la etapa 1 y se descarta su peso estructural.")
+            st.caption("**4. Inserción:** La etapa 2 lleva el payload a velocidad orbital.")
 # ── MONTE CARLO ────────────────────────────────────────────────────────────
 if algoritmo == "Monte Carlo":
     main_col, side_col = st.columns([2.3, 1.0], gap="large")
@@ -1964,3 +3178,363 @@ if algoritmo == "Monte Carlo":
 
     with side_col:
         _formulas_panel("Monte Carlo")
+
+
+# ── FILTRO DE KALMAN (VOZ) ────────────────────────────────────────────────────
+if algoritmo == "Filtro de Kalman (Voz)":
+    import numpy as np
+
+    # ── Panel de fórmulas lateral ────────────────────────────────────────────
+    def _formulas_kalman():
+        with st.container(border=True):
+            st.markdown("### Modelo de Estado")
+            st.latex(r"x_k = x_{k-1} + w_k, \quad w_k \sim \mathcal{N}(0,Q)")
+            st.latex(r"z_k = x_k + v_k, \quad v_k \sim \mathcal{N}(0,R)")
+            st.divider()
+            st.markdown("### Predicción")
+            st.latex(r"\hat{x}_{k|k-1} = \hat{x}_{k-1|k-1}")
+            st.latex(r"P_{k|k-1} = P_{k-1|k-1} + Q")
+            st.divider()
+            st.markdown("### Corrección")
+            st.latex(r"K_k = \frac{P_{k|k-1}}{P_{k|k-1} + R}")
+            st.latex(r"\hat{x}_{k|k} = \hat{x}_{k|k-1} + K_k\,(z_k - \hat{x}_{k|k-1})")
+            st.latex(r"P_{k|k} = (1-K_k)\,P_{k|k-1}")
+            st.divider()
+            st.markdown("### Métricas")
+            st.latex(r"\mathrm{MSE} = \frac{1}{N}\sum_{k=1}^{N}(x_k - \hat{x}_k)^2")
+            st.latex(r"\mathrm{SNR} = 10\log_{10}\!\left(\frac{\|x\|^2}{\|x-\hat{x}\|^2}\right)\;\mathrm{[dB]}")
+            st.divider()
+            st.caption("Q pequeño → señal varía lentamente (más suavizado).")
+            st.caption("R pequeño → alta confianza en la medición (menos filtrado).")
+
+    main_col, side_col = st.columns([2.5, 1.0], gap="large")
+
+    with side_col:
+        _formulas_kalman()
+
+    with main_col:
+        # ── Cabecera ─────────────────────────────────────────────────────────
+        with st.container(border=True):
+            st.subheader("🎙️ Reconstrucción de Señal de Voz — Filtro de Kalman")
+            st.caption(
+                "Compara el filtro de Kalman contra interpolación polinómica y spline cúbico "
+                "en la tarea de reducción de ruido sobre una señal de voz sintética."
+            )
+
+        # ── Parámetros ────────────────────────────────────────────────────────
+        with st.container(border=True):
+            st.markdown("### ⚙️ Parámetros de simulación")
+            col_p1, col_p2 = st.columns(2)
+
+            with col_p1:
+                st.markdown("**Señal y ruido**")
+                n_muestras = st.slider(
+                    "Muestras de señal", min_value=100, max_value=1000,
+                    value=400, step=50, key="kal_n"
+                )
+                snr_entrada = st.slider(
+                    "SNR entrada (dB)", min_value=-5, max_value=30,
+                    value=10, step=1, key="kal_snr"
+                )
+                freq_fund = st.slider(
+                    "Frecuencia fundamental (Hz)", min_value=80, max_value=300,
+                    value=150, step=10, key="kal_freq"
+                )
+                seed = st.number_input(
+                    "Semilla aleatoria", value=42, min_value=0,
+                    max_value=9999, step=1, key="kal_seed"
+                )
+
+            with col_p2:
+                st.markdown("**Parámetros del Filtro de Kalman**")
+                Q_exp = st.slider(
+                    "Q (ruido proceso) — exponente 10^x",
+                    min_value=-8, max_value=0, value=-2, step=1, key="kal_Q"
+                )
+                R_exp = st.slider(
+                    "R (ruido medición) — exponente 10^x",
+                    min_value=-3, max_value=1, value=-2, step=1, key="kal_R"
+                )
+                Q_val = 10.0 ** Q_exp
+                R_val = 10.0 ** R_exp
+                st.info(f"Q = {Q_val:.2e}   |   R = {R_val:.2e}")
+
+                st.markdown("**Parámetros de métodos clásicos**")
+                grado_poly = st.slider(
+                    "Grado polinomio", min_value=2, max_value=20,
+                    value=8, step=1, key="kal_grado"
+                )
+                factor_spline = st.slider(
+                    "Factor submuestreo spline", min_value=2, max_value=20,
+                    value=5, step=1, key="kal_spline"
+                )
+
+        # ── Botón de ejecución ────────────────────────────────────────────────
+        run_kal = st.button("▶ Ejecutar comparación", type="primary", key="kal_run")
+
+        if run_kal:
+            try:
+                # Generar señal
+                t_arr, x_original = generar_senal_voz(
+                    n_muestras=n_muestras,
+                    fs=8000.0,
+                    freq_fundamental=float(freq_fund),
+                    seed=int(seed),
+                )
+                z_ruidosa = agregar_ruido(x_original, snr_db=float(snr_entrada), seed=int(seed))
+
+                # Comparar métodos
+                res = comparar_metodos(
+                    t_arr, x_original, z_ruidosa,
+                    grado_poly=grado_poly,
+                    factor_spline=factor_spline,
+                    Q=Q_val,
+                    R=R_val,
+                )
+                metricas = res["metricas"]
+
+                # ── Tarjetas de métricas ──────────────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 📊 Métricas de reconstrucción")
+
+                    colores = {
+                        "Señal ruidosa": "#ef4444",
+                        "Polinomio":     "#f97316",
+                        "Spline cúbico": "#eab308",
+                        "Kalman":        "#22c55e",
+                    }
+                    iconos = {
+                        "Señal ruidosa": "🔴",
+                        "Polinomio":     "🟠",
+                        "Spline cúbico": "🟡",
+                        "Kalman":        "🟢",
+                    }
+
+                    mc = st.columns(len(metricas))
+                    for col_m, (nombre, vals) in zip(mc, metricas.items()):
+                        mse_v = vals["mse"]
+                        snr_v = vals["snr"]
+                        snr_str = f"{snr_v:.2f} dB" if np.isfinite(snr_v) else "∞"
+                        col_m.metric(
+                            f"{iconos[nombre]} {nombre}",
+                            f"SNR: {snr_str}",
+                            f"MSE: {mse_v:.5f}",
+                            delta_color="inverse",
+                        )
+
+                    # Tabla comparativa
+                    tabla_rows = []
+                    for nombre, vals in metricas.items():
+                        snr_v = vals["snr"]
+                        snr_str = f"{snr_v:.4f}" if np.isfinite(snr_v) else "∞"
+                        tabla_rows.append({
+                            "Método": f"{iconos[nombre]} {nombre}",
+                            "MSE": f"{vals['mse']:.6f}",
+                            "SNR (dB)": snr_str,
+                        })
+                    st.dataframe(
+                        pd.DataFrame(tabla_rows),
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+
+                # ── Gráfico comparativo de señales ────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 📈 Comparación de señales")
+                    t_ms = t_arr * 1000  # convertir a ms para visualización
+
+                    def _serie(t_ms, y, nombre, color):
+                        return pd.DataFrame({"t_ms": t_ms, "amplitud": y, "Señal": nombre, "_color": color})
+
+                    df_all = pd.concat([
+                        _serie(t_ms, x_original,       "Original",       "#6366f1"),
+                        _serie(t_ms, z_ruidosa,         "Ruidosa",        "#ef4444"),
+                        _serie(t_ms, res["kalman"],     "Kalman",         "#22c55e"),
+                        _serie(t_ms, res["spline"],     "Spline cúbico",  "#eab308"),
+                        _serie(t_ms, res["polinomio"],  "Polinomio",      "#f97316"),
+                    ], ignore_index=True)
+
+                    color_scale = alt.Scale(
+                        domain=["Original", "Ruidosa", "Kalman", "Spline cúbico", "Polinomio"],
+                        range=["#6366f1", "#ef4444", "#22c55e", "#eab308", "#f97316"],
+                    )
+
+                    chart_all = (
+                        alt.Chart(df_all)
+                        .mark_line(strokeWidth=1.8, opacity=0.9)
+                        .encode(
+                            x=alt.X("t_ms:Q", title="Tiempo (ms)"),
+                            y=alt.Y("amplitud:Q", title="Amplitud"),
+                            color=alt.Color("Señal:N", scale=color_scale),
+                            tooltip=[
+                                alt.Tooltip("t_ms:Q", title="t (ms)", format=".2f"),
+                                alt.Tooltip("amplitud:Q", format=".5f"),
+                                alt.Tooltip("Señal:N"),
+                            ],
+                        )
+                        .properties(height=380, title="Todas las señales")
+                        .interactive()
+                    )
+                    st.altair_chart(chart_all, use_container_width=True)
+
+                # ── Gráficos individuales por método ──────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 🔬 Detalle por método")
+                    tab1, tab2, tab3 = st.tabs(["Polinomio", "Spline cúbico", "Kalman"])
+
+                    def _chart_detalle(y_metodo, nombre_metodo, color_metodo):
+                        df_det = pd.concat([
+                            _serie(t_ms, x_original,   "Original",    "#6366f1"),
+                            _serie(t_ms, z_ruidosa,    "Ruidosa",     "#ef4444"),
+                            _serie(t_ms, y_metodo,     nombre_metodo, color_metodo),
+                        ], ignore_index=True)
+                        return (
+                            alt.Chart(df_det)
+                            .mark_line(strokeWidth=1.8, opacity=0.85)
+                            .encode(
+                                x=alt.X("t_ms:Q", title="Tiempo (ms)"),
+                                y=alt.Y("amplitud:Q", title="Amplitud"),
+                                color=alt.Color(
+                                    "Señal:N",
+                                    scale=alt.Scale(
+                                        domain=["Original", "Ruidosa", nombre_metodo],
+                                        range=["#6366f1", "#ef4444", color_metodo],
+                                    ),
+                                ),
+                                tooltip=[
+                                    alt.Tooltip("t_ms:Q", title="t (ms)", format=".2f"),
+                                    alt.Tooltip("amplitud:Q", format=".5f"),
+                                    alt.Tooltip("Señal:N"),
+                                ],
+                            )
+                            .properties(height=320, title=f"Original vs Ruidosa vs {nombre_metodo}")
+                            .interactive()
+                        )
+
+                    with tab1:
+                        mse_p = metricas["Polinomio"]["mse"]
+                        snr_p = metricas["Polinomio"]["snr"]
+                        st.altair_chart(_chart_detalle(res["polinomio"], "Polinomio", "#f97316"), use_container_width=True)
+                        st.info(f"Polinomio grado {grado_poly}  →  MSE = {mse_p:.6f}  |  SNR = {snr_p:.2f} dB")
+                        st.caption(
+                            "El polinomio ajusta toda la señal ruidosa globalmente. "
+                            "Con grados altos aparecen oscilaciones de Runge en los extremos."
+                        )
+
+                    with tab2:
+                        mse_s = metricas["Spline cúbico"]["mse"]
+                        snr_s = metricas["Spline cúbico"]["snr"]
+                        st.altair_chart(_chart_detalle(res["spline"], "Spline cúbico", "#eab308"), use_container_width=True)
+                        st.info(f"Spline cúbico (1 nodo cada {factor_spline} muestras)  →  MSE = {mse_s:.6f}  |  SNR = {snr_s:.2f} dB")
+                        st.caption(
+                            "El spline suaviza localmente al pasar por nodos submuestreados, "
+                            "evitando interpolación exacta del ruido. Mejora el polinomio, "
+                            "pero sigue limitado a ajuste determinístico."
+                        )
+
+                    with tab3:
+                        mse_k = metricas["Kalman"]["mse"]
+                        snr_k = metricas["Kalman"]["snr"]
+                        st.altair_chart(_chart_detalle(res["kalman"], "Kalman", "#22c55e"), use_container_width=True)
+                        st.info(f"Filtro de Kalman (Q={Q_val:.2e}, R={R_val:.2e})  →  MSE = {mse_k:.6f}  |  SNR = {snr_k:.2f} dB")
+                        st.caption(
+                            "El filtro de Kalman combina predicción del modelo y corrección con la "
+                            "medición en cada paso, ponderando por las covarianzas Q y R. "
+                            "Provee la estimación MMSE (mínimo error cuadrático medio) para el modelo de paseo aleatorio."
+                        )
+
+                # ── Error residual ─────────────────────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 📉 Error residual |x_original − x̂|")
+
+                    df_err = pd.concat([
+                        _serie(t_ms, np.abs(x_original - z_ruidosa),    "Ruidosa",       "#ef4444"),
+                        _serie(t_ms, np.abs(x_original - res["polinomio"]), "Polinomio", "#f97316"),
+                        _serie(t_ms, np.abs(x_original - res["spline"]),    "Spline",    "#eab308"),
+                        _serie(t_ms, np.abs(x_original - res["kalman"]),    "Kalman",    "#22c55e"),
+                    ], ignore_index=True)
+
+                    chart_err = (
+                        alt.Chart(df_err)
+                        .mark_line(strokeWidth=1.5, opacity=0.85)
+                        .encode(
+                            x=alt.X("t_ms:Q", title="Tiempo (ms)"),
+                            y=alt.Y("amplitud:Q", title="|error|"),
+                            color=alt.Color(
+                                "Señal:N",
+                                scale=alt.Scale(
+                                    domain=["Ruidosa", "Polinomio", "Spline", "Kalman"],
+                                    range=["#ef4444", "#f97316", "#eab308", "#22c55e"],
+                                ),
+                            ),
+                            tooltip=[
+                                alt.Tooltip("t_ms:Q", title="t (ms)", format=".2f"),
+                                alt.Tooltip("amplitud:Q", title="|error|", format=".6f"),
+                                alt.Tooltip("Señal:N"),
+                            ],
+                        )
+                        .properties(height=320, title="Error absoluto por método")
+                        .interactive()
+                    )
+                    st.altair_chart(chart_err, use_container_width=True)
+
+                # ── SNR por método — barras ────────────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 🏆 Comparación SNR (barras)")
+                    snr_vals = {n: v["snr"] for n, v in metricas.items() if np.isfinite(v["snr"])}
+                    df_snr = pd.DataFrame(
+                        [{"Método": k, "SNR (dB)": v} for k, v in snr_vals.items()]
+                    )
+                    color_map = {
+                        "Señal ruidosa": "#ef4444",
+                        "Polinomio":     "#f97316",
+                        "Spline cúbico": "#eab308",
+                        "Kalman":        "#22c55e",
+                    }
+                    df_snr["color"] = df_snr["Método"].map(color_map)
+                    chart_snr = (
+                        alt.Chart(df_snr)
+                        .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+                        .encode(
+                            x=alt.X("Método:N", sort=None, axis=alt.Axis(labelAngle=0)),
+                            y=alt.Y("SNR (dB):Q", title="SNR (dB)"),
+                            color=alt.Color(
+                                "Método:N",
+                                scale=alt.Scale(
+                                    domain=list(color_map.keys()),
+                                    range=list(color_map.values()),
+                                ),
+                                legend=None,
+                            ),
+                            tooltip=[
+                                alt.Tooltip("Método:N"),
+                                alt.Tooltip("SNR (dB):Q", format=".3f"),
+                            ],
+                        )
+                        .properties(height=300, title="SNR de salida por método (mayor es mejor)")
+                    )
+                    st.altair_chart(chart_snr, use_container_width=True)
+
+                # ── Texto conclusivo ───────────────────────────────────────────
+                with st.container(border=True):
+                    st.markdown("### 💡 Interpretación de resultados")
+                    st.markdown("### 💡 Interpretación de resultados")
+                    mejor = max(metricas.items(), key=lambda kv: kv[1]["snr"])
+                    peor  = min(metricas.items(), key=lambda kv: kv[1]["snr"])
+                    st.markdown(
+                        f"- **Mejor método:** {iconos[mejor[0]]} **{mejor[0]}** "
+                        f"con SNR = {mejor[1]['snr']:.2f} dB y MSE = {mejor[1]['mse']:.6f}"
+                    )
+                    st.markdown(
+                        f"- **Peor método:** {iconos[peor[0]]} **{peor[0]}** "
+                        f"con SNR = {peor[1]['snr']:.2f} dB y MSE = {peor[1]['mse']:.6f}"
+                    )
+                    st.markdown(
+                        "> *Mientras los métodos de interpolación intentan describir los datos "
+                        "observados, el filtro de Kalman busca **inferir la realidad que los genera.***"
+                    )
+
+            except Exception as e:
+                import traceback
+                st.error(f"Error en la simulación: {e}")
+                st.code(traceback.format_exc())

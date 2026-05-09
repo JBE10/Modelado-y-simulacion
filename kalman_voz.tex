@@ -1,0 +1,428 @@
+\documentclass[12pt,a4paper]{article}
+
+% ── Paquetes ──────────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\geometry{margin=2.5cm, headheight=15pt}
+
+% ── Estilo de código ──────────────────────────────────────────────────────────
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{keywordcolor}{RGB}{0,100,180}
+\definecolor{commentcolor}{RGB}{100,120,100}
+\definecolor{stringcolor}{RGB}{160,40,40}
+
+\lstset{
+  language=Python,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{keywordcolor}\bfseries,
+  commentstyle=\color{commentcolor}\itshape,
+  stringstyle=\color{stringcolor},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=4,
+}
+
+% ── Encabezado ────────────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Modelado y Simulación}
+\lhead{Filtro de Kalman — Señales de Voz}
+\cfoot{\thepage}
+
+% ── Título ────────────────────────────────────────────────────────────────────
+\title{
+  \vspace{-1cm}
+  {\Large \textbf{Caso de Estudio}} \\[0.4em]
+  {\LARGE Reconstrucción de Señales de Voz en Entornos Ruidosos} \\[0.3em]
+  {\large mediante el Filtro de Kalman} \\[0.5em]
+  \hrule
+}
+\author{Juan Bautista Espino \\[0.2em]
+  \small Modelado y Simulación --- 2026, 1\textsuperscript{er} cuatrimestre}
+\date{\today}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Planteamiento del Problema}
+% ══════════════════════════════════════════════════════════════════════════════
+
+En aplicaciones reales de comunicación y procesamiento del habla —clases virtuales,
+llamadas telefónicas, sistemas de reconocimiento automático de voz (ASR)—, la señal
+captada por el micrófono no es la voz pura del locutor sino una versión degradada por:
+
+\begin{itemize}[leftmargin=1.5cm]
+  \item \textbf{Ruido ambiental}: tráfico, viento, conversaciones de fondo.
+  \item \textbf{Ruido electrónico}: cuantificación del ADC, interferencias del circuito.
+  \item \textbf{Pérdidas de paquetes}: en comunicación VoIP o streaming.
+\end{itemize}
+
+Estas perturbaciones reducen la inteligibilidad, dificultan el análisis automático y
+degradan la experiencia perceptual del oyente.
+
+\subsection*{Pregunta central}
+
+\begin{center}
+\textit{¿Cómo reconstruir una señal de voz más cercana a la original
+a partir de mediciones ruidosas, usando herramientas de estimación estadística?}
+\end{center}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Objetivo e Hipótesis}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Objetivo}
+
+Evaluar cuantitativamente si el filtro de Kalman logra:
+\begin{enumerate}
+  \item Reducir el ruido aditivo en señales de voz sintéticas.
+  \item Aproximar mejor la señal ``real'' que métodos de interpolación clásicos.
+  \item Ofrecer una ventaja medible en las métricas MSE y SNR.
+\end{enumerate}
+
+\subsection{Hipótesis}
+
+\textit{El filtro de Kalman proporciona una reconstrucción más fiel de la señal de
+voz que la interpolación polinómica y el spline cúbico, gracias a su capacidad de
+modelar explícitamente la incertidumbre del proceso y de la medición, e incorporar
+la dinámica temporal de la señal.}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Marco Teórico}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Modelo de señal observada}
+
+Se modela la situación como un sistema de estado discreto:
+
+\begin{align}
+  x_k &= x_{k-1} + w_k, \qquad w_k \sim \mathcal{N}(0,\,Q) \label{eq:estado}\\
+  z_k &= x_k + v_k, \qquad\;\; v_k \sim \mathcal{N}(0,\,R) \label{eq:medicion}
+\end{align}
+
+donde $x_k$ es la amplitud real (desconocida) de la voz en el instante $k$,
+$z_k$ es la muestra ruidosa observada, $w_k$ es el ruido de proceso (variabilidad
+intrínseca de la señal) y $v_k$ es el ruido de medición (ruido ambiental/electrónico).
+Las varianzas $Q$ y $R$ cuantifican la incertidumbre en cada fuente.
+
+\subsection{Filtro de Kalman escalar}
+
+El filtro de Kalman resuelve el problema de \textbf{estimación MMSE}
+(Minimum Mean Square Error) para el modelo lineal gaussiano de las
+ecuaciones \eqref{eq:estado}--\eqref{eq:medicion}.
+Opera en dos pasos recursivos:
+
+\subsubsection*{Paso 1 — Predicción}
+
+Se proyecta el estado y la covarianza del error al instante siguiente sin
+utilizar aún la medición $z_k$:
+
+\begin{align}
+  \hat{x}_{k \mid k-1} &= \hat{x}_{k-1 \mid k-1} \label{eq:pred_x}\\
+  P_{k \mid k-1}        &= P_{k-1 \mid k-1} + Q   \label{eq:pred_P}
+\end{align}
+
+\subsubsection*{Paso 2 — Corrección}
+
+Se incorpora la medición $z_k$ ponderando por la \textbf{ganancia de Kalman} $K_k$:
+
+\begin{align}
+  K_k &= \frac{P_{k \mid k-1}}{P_{k \mid k-1} + R} \label{eq:ganancia}\\
+  \hat{x}_{k \mid k} &= \hat{x}_{k \mid k-1} + K_k \bigl(z_k - \hat{x}_{k \mid k-1}\bigr) \label{eq:correc_x}\\
+  P_{k \mid k} &= (1 - K_k)\,P_{k \mid k-1} \label{eq:correc_P}
+\end{align}
+
+\paragraph{Interpretación de la ganancia.}
+Si $R \ll P_{k|k-1}$ (alta confianza en la medición), entonces $K_k \to 1$
+y el filtro sigue de cerca a $z_k$.
+Si $Q \ll R$ (proceso muy suave y medición muy ruidosa), entonces $K_k \to 0$
+y el filtro ignora la medición y confía en su predicción.
+
+\subsection{Métodos clásicos de referencia}
+
+\subsubsection*{Interpolación polinómica}
+
+Dado el conjunto de puntos $\{(t_k, z_k)\}_{k=0}^{N-1}$, se busca el polinomio
+de grado $n$ que minimiza el error cuadrático total (ajuste por mínimos cuadrados):
+
+\begin{equation}
+  P(t) = \sum_{j=0}^{n} c_j\, t^j, \qquad
+  \mathbf{c} = \arg\min_{\mathbf{c}} \sum_{k=0}^{N-1}\bigl(z_k - P(t_k)\bigr)^2
+\end{equation}
+
+Para grados altos y datos equiespaciados aparecen las \textbf{oscilaciones de Runge}
+en los extremos del intervalo, que amplifican el error en lugar de reducirlo.
+
+\subsubsection*{Spline cúbico natural}
+
+Se divide el dominio en subintervalos mediante nodos $\{t_{i_0}, t_{i_1}, \ldots\}$
+obtenidos por submuestreo (cada $s$ muestras). En cada subintervalo se ajusta un
+polinomio cúbico, imponiendo continuidad de primera y segunda derivada:
+
+\begin{equation}
+  S_j(t) = a_j + b_j(t - t_j) + c_j(t-t_j)^2 + d_j(t-t_j)^3,
+  \qquad t \in [t_j, t_{j+1}]
+\end{equation}
+
+con condiciones de frontera naturales $S''(t_0) = S''(t_{N-1}) = 0$.
+
+\subsection{Métricas de evaluación}
+
+\begin{align}
+  \mathrm{MSE} &= \frac{1}{N}\sum_{k=1}^{N}\bigl(x_k - \hat{x}_k\bigr)^2
+  \label{eq:mse}\\[4pt]
+  \mathrm{SNR} &= 10\log_{10}\!\left(\frac{\displaystyle\sum_{k}x_k^2}
+  {\displaystyle\sum_{k}(x_k-\hat{x}_k)^2}\right) \quad [\mathrm{dB}]
+  \label{eq:snr}
+\end{align}
+
+Un MSE menor y un SNR mayor indican mejor reconstrucción.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Metodología}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Generación de la señal de voz sintética}
+
+Se genera una señal tipo voz mediante una suma de $H = 7$ armónicos con amplitudes
+decrecientes (modelo de fuente glótica simplificado) y una envolvente de amplitud lenta:
+
+\begin{equation}
+  x(t) = A(t) \cdot \sum_{k=1}^{H} a_k \sin\!\bigl(2\pi k f_0 t + \varphi_k\bigr),
+  \qquad A(t) = \tfrac{1}{2}\!\left(1 + \sin\!\bigl(2\pi \cdot 1.5\cdot t + \tfrac{\pi}{4}\bigr)\right)
+\end{equation}
+
+con $f_0 = 150$ Hz (frecuencia fundamental), $a_k = \{1,\,0.6,\,0.35,\,0.2,\,0.12,\,0.07,\,0.04\}$
+y fases $\varphi_k$ aleatorias uniformes en $[0, 2\pi)$.
+La señal se normaliza al rango $[-1, 1]$ y se muestrea a $f_s = 8000$ Hz.
+
+\subsection{Adición de ruido blanco gaussiano}
+
+Para simular un entorno con relación señal/ruido de entrada $\mathrm{SNR_{in}}$ dB,
+se añade ruido blanco $v \sim \mathcal{N}(0, \sigma_v^2)$ donde:
+
+\begin{equation}
+  \sigma_v^2 = \frac{P_x}{10^{\,\mathrm{SNR_{in}}/10}}, \qquad P_x = \frac{1}{N}\sum_k x_k^2
+\end{equation}
+
+\subsection{Pipeline de comparación}
+
+\begin{enumerate}
+  \item Generar $x$ (señal limpia) y $z = x + v$ (señal ruidosa).
+  \item Aplicar \textbf{interpolación polinómica} (grado $n = 8$) sobre $z$.
+  \item Aplicar \textbf{spline cúbico} (nodos cada $s = 5$ muestras) sobre $z$.
+  \item Aplicar \textbf{filtro de Kalman} ($Q = 10^{-2}$, $R = 10^{-2}$) sobre $z$.
+  \item Calcular MSE y SNR de salida de cada método comparando con $x$.
+\end{enumerate}
+
+\subsection{Implementación en Python}
+
+El módulo \texttt{kalman\_voz.py} implementa todos los métodos.
+A continuación se muestra el núcleo del filtro de Kalman:
+
+\begin{lstlisting}[caption={Filtro de Kalman escalar — \texttt{kalman\_voz.py}}]
+def filtro_kalman(z, Q=1e-2, R=1e-2, x0=0.0, P0=1.0):
+    n = len(z)
+    x_hat = np.zeros(n)
+    x_pred = x0
+    P = P0
+
+    for k in range(n):
+        # -- Prediccion --
+        P_pred = P + Q
+
+        # -- Correccion --
+        K = P_pred / (P_pred + R)          # Ganancia de Kalman
+        x_hat[k] = x_pred + K * (z[k] - x_pred)
+        P = (1 - K) * P_pred
+
+        x_pred = x_hat[k]
+
+    return x_hat
+\end{lstlisting}
+
+La generación de la señal sintética:
+
+\begin{lstlisting}[caption={Generación de voz sintética — \texttt{kalman\_voz.py}}]
+def generar_senal_voz(n_muestras=400, fs=8000.0, freq_fundamental=150.0, seed=42):
+    rng = np.random.default_rng(seed)
+    t = np.linspace(0, n_muestras / fs, n_muestras, endpoint=False)
+
+    x = np.zeros(n_muestras)
+    for k, amp in enumerate([1.0, 0.6, 0.35, 0.2, 0.12, 0.07, 0.04], start=1):
+        phase = rng.uniform(0, 2 * np.pi)
+        x += amp * np.sin(2 * np.pi * k * freq_fundamental * t + phase)
+
+    env = 0.5 * (1 + np.sin(2 * np.pi * 1.5 * t + np.pi / 4))
+    x *= env
+    x /= np.max(np.abs(x) + 1e-12)
+    return t, x
+\end{lstlisting}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Resultados}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Configuración del experimento}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Parámetro} & \textbf{Valor} \\
+\midrule
+Muestras ($N$)             & 400 \\
+Frecuencia de muestreo ($f_s$) & 8\,000 Hz \\
+Frecuencia fundamental ($f_0$) & 150 Hz \\
+SNR de entrada             & 10 dB \\
+Grado del polinomio        & 8 \\
+Factor de submuestreo (spline) & 5 \\
+$Q$ (Kalman)               & $10^{-2}$ \\
+$R$ (Kalman)               & $10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Métricas obtenidas}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Método} & \textbf{MSE} & \textbf{SNR de salida (dB)} \\
+\midrule
+Señal ruidosa (sin filtrar) & 0.016644 & 10.43 \\
+Interpolación polinómica    & 0.169189 &  0.36 \\
+Spline cúbico               & 0.017644 & 10.18 \\
+\textbf{Filtro de Kalman}   & \textbf{0.013317} & \textbf{11.79} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Análisis de resultados}
+
+\paragraph{Interpolación polinómica.}
+El polinomio de grado 8 presenta el peor desempeño: MSE $= 0.169$, SNR $= 0.36$ dB.
+Al ajustar globalmente sobre los datos ruidosos, el método introduce las oscilaciones
+de Runge en los extremos del intervalo, \emph{amplificando} el error en lugar de
+reducirlo. Este comportamiento confirma que la interpolación global es inadecuada
+para señales estocásticas con ruido.
+
+\paragraph{Spline cúbico.}
+Al utilizar nodos submuestreados (1 de cada 5 muestras), el spline evita interpolar
+exactamente el ruido, obteniendo MSE $= 0.018$ y SNR $= 10.18$ dB, levemente inferior
+a la señal ruidosa sin procesar. Aunque el suavizado local es conceptualmente correcto,
+el método no tiene mecanismo para estimar cuánto del residuo es ruido real versus
+variación legítima de la señal.
+
+\paragraph{Filtro de Kalman.}
+Con $Q = R = 10^{-2}$, el filtro obtiene \textbf{MSE $= 0.013$} y \textbf{SNR $= 11.79$ dB},
+superando a todos los métodos. La mejora de $+1.36$ dB sobre la señal ruidosa y de
+$+1.61$ dB sobre el spline es consecuencia directa de la estimación probabilística:
+en cada paso, el filtro pondera la predicción del modelo con la observación actual
+según la relación $K_k = P_{k|k-1}/(P_{k|k-1}+R)$, asignando mayor peso a la fuente
+más confiable.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Discusión}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{¿Por qué el Filtro de Kalman supera a la interpolación?}
+
+Los métodos de interpolación son esencialmente \textbf{deterministas}: buscan una
+curva que pase ``cerca'' de los datos observados, sin distinguir si la variabilidad
+es parte de la señal o ruido. El filtro de Kalman, en cambio, opera en un marco
+\textbf{probabilístico}: modela explícitamente dos fuentes de incertidumbre ($Q$ y $R$)
+y computa en cada instante la estimación que minimiza el error cuadrático esperado.
+
+\subsection{Rol de los parámetros Q y R}
+
+La razón $Q/R$ controla el comportamiento del filtro:
+
+\begin{itemize}
+  \item $Q \ll R$: el filtro confía más en su predicción que en la medición.
+    Produce una salida muy suavizada pero potencialmente retrasada o sesgada.
+  \item $Q \gg R$: el filtro sigue de cerca cada muestra nueva.
+    En el límite ($R \to 0$), la salida coincide con la señal ruidosa.
+  \item $Q \approx R$: equilibrio óptimo para señales moderadamente no estacionarias
+    con SNR de entrada $\sim 10$ dB.
+\end{itemize}
+
+\subsection{Limitaciones del modelo de paseo aleatorio}
+
+El modelo de estado \eqref{eq:estado} asume que la variación de $x_k$ entre muestras
+consecutivas es ruido blanco. Para señales de voz reales, esto es una aproximación:
+la voz tiene correlación de largo plazo (prosodia, vocales sostenidas) que un modelo
+autoregresivo (AR) o un Kalman de orden superior capturaría mejor.
+Sin embargo, para el propósito de este caso de estudio, el modelo escalar demuestra
+con claridad las ventajas del enfoque probabilístico.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Conclusiones}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}
+  \item El filtro de Kalman escalar, con parámetros $Q = R = 10^{-2}$, logró
+        \textbf{SNR $= 11.79$ dB}, superando la señal ruidosa ($10.43$ dB),
+        el spline cúbico ($10.18$ dB) y la interpolación polinómica ($0.36$ dB).
+
+  \item La interpolación polinómica global es \textbf{contraindicada} para señales
+        estocásticas con ruido: las oscilaciones de Runge empeoran la reconstrucción
+        respecto a no aplicar ningún filtrado.
+
+  \item El spline cúbico ofrece una mejora marginal frente a la señal sin procesar,
+        pero no puede explotar la estructura probabilística del problema.
+
+  \item La hipótesis planteada queda \textbf{confirmada}: el filtro de Kalman supera
+        a los métodos clásicos gracias a su modelado explícito del ruido de proceso
+        y de medición, y a su actualización recursiva que incorpora la dinámica temporal.
+
+  \item Las líneas de trabajo futuro incluyen: modelos AR de orden superior,
+        filtro de Kalman extendido para señales no lineales, e integración con
+        pipelines de reconocimiento automático de voz (ASR).
+\end{enumerate}
+
+\vspace{1em}
+\begin{center}
+\textit{``Mientras los métodos de interpolación intentan describir los datos observados,}\\
+\textit{el filtro de Kalman busca inferir la realidad que los genera.''}
+\end{center}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Referencias}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}
+  \item Kalman, R.~E. (1960). \textit{A new approach to linear filtering and prediction
+        problems}. Journal of Basic Engineering, 82(1), 35--45.
+  \item Haykin, S. (2001). \textit{Kalman Filtering and Neural Networks}.
+        Wiley-Interscience.
+  \item Proakis, J.~G., \& Manolakis, D.~G. (2006). \textit{Digital Signal Processing:
+        Principles, Algorithms, and Applications} (4th ed.). Prentice Hall.
+  \item Virtanen, P. et al. (2020). \textit{SciPy 1.0: Fundamental Algorithms for
+        Scientific Computing in Python}. Nature Methods, 17, 261--272.
+\end{enumerate}
+
+\end{document}
