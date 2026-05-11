@@ -313,18 +313,38 @@ $R$ (Kalman)               & $10^{-2}$ \\
 \toprule
 \textbf{Método} & \textbf{MSE} & \textbf{SNR de salida (dB)} \\
 \midrule
-Señal ruidosa (sin filtrar) & 0.016644 & 10.43 \\
-Interpolación polinómica    & 0.169189 &  0.36 \\
-Spline cúbico               & 0.017644 & 10.18 \\
-\textbf{Filtro de Kalman}   & \textbf{0.013317} & \textbf{11.79} \\
+Señal ruidosa (sin filtrar) & 0.018242 & 10.04 \\
+Interpolación polinómica    & 0.169300 &  0.36 \\
+Spline cúbico               & 0.020937 &  9.44 \\
+\textbf{Filtro de Kalman}   & \textbf{0.011802} & \textbf{11.93} \\
 \bottomrule
 \end{tabular}
 \end{center}
 
+\subsection{Visualización de resultados}
+
+La Figura \ref{fig:comparacion} muestra la señal original, la ruidosa y la reconstrucción lograda por cada método. Se observa que el filtro de Kalman logra una estimación mucho más fiel a la dinámica oscilatoria de la voz.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{fig4_voz_comparacion.png}
+  \caption{Reconstrucción de señal de voz: comparación de métodos.}
+  \label{fig:comparacion}
+\end{figure}
+
+Las métricas comparativas se resumen en la Figura \ref{fig:metricas}, donde se aprecia la reducción del error y la ganancia en SNR del filtro de Kalman frente a las alternativas clásicas.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{fig6_metricas_barras.png}
+  \caption{Comparativa de MSE y SNR para todos los métodos.}
+  \label{fig:metricas}
+\end{figure}
+
 \subsection{Análisis de resultados}
 
 \paragraph{Interpolación polinómica.}
-El polinomio de grado 8 presenta el peor desempeño: MSE $= 0.169$, SNR $= 0.36$ dB.
+El polinomio de grado 8 presenta el peor desempeño: MSE $= 0.1693$, SNR $= 0.36$ dB.
 Al ajustar globalmente sobre los datos ruidosos, el método introduce las oscilaciones
 de Runge en los extremos del intervalo, \emph{amplificando} el error en lugar de
 reducirlo. Este comportamiento confirma que la interpolación global es inadecuada
@@ -332,18 +352,17 @@ para señales estocásticas con ruido.
 
 \paragraph{Spline cúbico.}
 Al utilizar nodos submuestreados (1 de cada 5 muestras), el spline evita interpolar
-exactamente el ruido, obteniendo MSE $= 0.018$ y SNR $= 10.18$ dB, levemente inferior
+exactamente el ruido, obteniendo MSE $= 0.0209$ y SNR $= 9.44$ dB, levemente inferior
 a la señal ruidosa sin procesar. Aunque el suavizado local es conceptualmente correcto,
 el método no tiene mecanismo para estimar cuánto del residuo es ruido real versus
 variación legítima de la señal.
 
 \paragraph{Filtro de Kalman.}
-Con $Q = R = 10^{-2}$, el filtro obtiene \textbf{MSE $= 0.013$} y \textbf{SNR $= 11.79$ dB},
-superando a todos los métodos. La mejora de $+1.36$ dB sobre la señal ruidosa y de
-$+1.61$ dB sobre el spline es consecuencia directa de la estimación probabilística:
+Con $Q = R = 10^{-2}$, el filtro obtiene \textbf{MSE $= 0.0118$} y \textbf{SNR $= 11.93$ dB},
+superando a todos los métodos. La mejora de $+1.89$ dB sobre la señal ruidosa y de
+$+2.49$ dB sobre el spline es consecuencia directa de la estimación probabilística:
 en cada paso, el filtro pondera la predicción del modelo con la observación actual
-según la relación $K_k = P_{k|k-1}/(P_{k|k-1}+R)$, asignando mayor peso a la fuente
-más confiable.
+según la relación de covarianza, asignando mayor peso a la fuente más confiable.
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Discusión}
@@ -385,8 +404,8 @@ con claridad las ventajas del enfoque probabilístico.
 
 \begin{enumerate}
   \item El filtro de Kalman escalar, con parámetros $Q = R = 10^{-2}$, logró
-        \textbf{SNR $= 11.79$ dB}, superando la señal ruidosa ($10.43$ dB),
-        el spline cúbico ($10.18$ dB) y la interpolación polinómica ($0.36$ dB).
+        \textbf{SNR $= 11.93$ dB}, superando la señal ruidosa ($10.04$ dB),
+        el spline cúbico ($9.44$ dB) y la interpolación polinómica ($0.36$ dB).
 
   \item La interpolación polinómica global es \textbf{contraindicada} para señales
         estocásticas con ruido: las oscilaciones de Runge empeoran la reconstrucción

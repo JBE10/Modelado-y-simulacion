@@ -14,28 +14,26 @@ import numpy as np
 def generar_senal_voz(n_muestras=400, fs=8000.0, freq_fundamental=150.0, seed=42):
     """
     Genera una señal de voz sintética (suma de armónicos) con envolvente.
-
-    Returns:
-        t: array de tiempos (segundos)
-        x: señal limpia
+    Basado en el modelo glótico simplificado descrito en el reporte.
     """
-    rng = np.random.RandomState(seed)
-    t = np.arange(n_muestras) / fs
+    rng = np.random.default_rng(seed)
+    t = np.linspace(0, n_muestras / fs, n_muestras, endpoint=False)
 
-    # Fundamental + armónicos
+    # Fundamental + 6 armónicos (total 7)
     x = np.zeros(n_muestras)
-    for k in range(1, 6):  # 5 armónicos
-        amp = 1.0 / k
+    amplitudes = [1.0, 0.6, 0.35, 0.2, 0.12, 0.07, 0.04]
+    for k, amp in enumerate(amplitudes, start=1):
         fase = rng.uniform(0, 2 * np.pi)
         x += amp * np.sin(2 * np.pi * freq_fundamental * k * t + fase)
 
-    # Envolvente suave
-    envolvente = np.sin(np.pi * np.arange(n_muestras) / n_muestras) ** 0.5
+    # Envolvente sinusoidal lenta
+    envolvente = 0.5 * (1 + np.sin(2 * np.pi * 1.5 * t + np.pi / 4))
     x *= envolvente
 
     # Normalizar a [-1, 1]
-    if np.max(np.abs(x)) > 0:
-        x = x / np.max(np.abs(x))
+    max_val = np.max(np.abs(x))
+    if max_val > 0:
+        x = x / max_val
 
     return t, x
 
@@ -44,36 +42,20 @@ def agregar_ruido(x, snr_db=10.0, seed=0):
     """
     Agrega ruido blanco gaussiano a la señal x con una SNR dada en dB.
     """
-    rng = np.random.RandomState(seed)
+    rng = np.random.default_rng(seed)
     potencia_senal = np.mean(x ** 2)
     potencia_ruido = potencia_senal / (10 ** (snr_db / 10))
     ruido = rng.normal(0, np.sqrt(potencia_ruido), len(x))
     return x + ruido
 
 
-# ── Filtro de Kalman ─────────────────────────────────────────────────────────
-
 def filtro_kalman(z, Q=0.01, R=0.1, x0=0.0, P0=1.0):
     """
     Filtro de Kalman 1D escalar.
-
-    Args:
-        z: señal observada (puede contener NaN para datos perdidos)
-        Q: varianza del ruido de proceso
-        R: varianza del ruido de medición
-        x0: estado inicial
-        P0: covarianza inicial
-
-    Returns:
-        x_est: estimación filtrada
-        ganancias: ganancia K en cada paso
-        covarianzas: covarianza P en cada paso
     """
     n = len(z)
     x_est = np.zeros(n)
-    ganancias = np.zeros(n)
-    covarianzas = np.zeros(n)
-
+    
     x = x0
     P = P0
 
@@ -88,15 +70,13 @@ def filtro_kalman(z, Q=0.01, R=0.1, x0=0.0, P0=1.0):
             x = x_pred + K * (z[i] - x_pred)
             P = (1 - K) * P_pred
         else:
-            K = 0.0
+            # Pérdida de datos
             x = x_pred
             P = P_pred
 
         x_est[i] = x
-        ganancias[i] = K
-        covarianzas[i] = P
 
-    return x_est, ganancias, covarianzas
+    return x_est, None, None
 
 
 # ── Métodos de interpolación ─────────────────────────────────────────────────
