@@ -14,7 +14,7 @@ class SteffensenModule(DashboardModule):
     def name(self) -> str:
         return "Steffensen-Aitken"
 
-    def render(self):
+    def render(self, **kwargs):
         main_col, side_col = st.columns([2.3, 1.0], gap="large")
         with main_col:
             with st.container(border=True):

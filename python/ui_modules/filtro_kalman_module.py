@@ -14,7 +14,7 @@ class KalmanModule(DashboardModule):
     def name(self) -> str:
         return "Filtro de Kalman (Voz)"
 
-    def render(self):
+    def render(self, **kwargs):
         def _formulas_kalman():
             with st.container(border=True):
                 st.markdown("### Modelo de Estado")

@@ -1,20 +1,10 @@
-"""
-ui_utils.py — Shared utilities for all dashboard UI modules.
-
-Contains:
-  - Math namespace & function parsers  (norm, make_fn, make_fn_2d, make_fn_ty)
-  - Number/cell parsing                (parse_number_cell)
-  - LaTeX formatting helpers           (_latex_float, _latex_bound, _fmt_iter_df,
-                                        expr_integrando_latex)
-  - Shared Streamlit rendering helpers (_formulas_panel, graficar_fx, mostrar_resultados)
-"""
 import math
-
-import altair as alt
+import sympy
 import pandas as pd
+import altair as alt
 import streamlit as st
+import numpy as np
 
-# ── Math namespace for eval ────────────────────────────────────────────────────
 MATH_NS = {
     "sin": math.sin, "cos": math.cos, "tan": math.tan,
     "exp": math.exp, "log": math.log, "ln": math.log,
@@ -23,38 +13,25 @@ MATH_NS = {
     "pi": math.pi, "e": math.e,
 }
 
-MATH_SYMPY_NS_FACTORY = None  # lazy
+def norm(expr):
+    return expr.replace("^", "**").strip()
 
-
-def _get_sympy_ns():
-    import sympy
-    return {
+def make_fn(expr):
+    expr = norm(expr).replace("ln(", "log(")
+    MATH_SYMPY_NS = {
         "pi": sympy.pi, "e": sympy.E, "E": sympy.E,
         "sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
         "exp": sympy.exp, "log": sympy.log, "ln": sympy.log,
         "sqrt": sympy.sqrt, "abs": sympy.Abs,
         "cbrt": lambda z: sympy.root(z, 3),
     }
-
-
-# ── Expression normaliser ──────────────────────────────────────────────────────
-def norm(expr: str) -> str:
-    return expr.replace("^", "**").strip()
-
-
-# ── Function parsers ───────────────────────────────────────────────────────────
-def make_fn(expr: str):
-    """Parse a math expression in x and return a callable f(x) → float."""
-    import sympy
-    expr = norm(expr).replace("ln(", "log(")
-    ns = _get_sympy_ns()
     try:
-        parsed_expr = sympy.sympify(expr, locals=ns)
-        x_sym = sympy.Symbol("x")
+        parsed_expr = sympy.sympify(expr, locals=MATH_SYMPY_NS)
+        x_sym = sympy.Symbol('x')
         f_lambdified = sympy.lambdify(x_sym, parsed_expr, "math")
-
         def f(x):
             try:
+                # Retornamos float puro
                 val = f_lambdified(x)
                 if isinstance(val, complex) and val.imag == 0:
                     val = val.real
@@ -69,65 +46,13 @@ def make_fn(expr: str):
                         return float(lim.evalf())
                 except Exception:
                     pass
-                return float("nan")
-
+                return float('nan')
         return f
     except Exception as e:
         raise ValueError(f"Expresión matemática inválida: {e}")
 
-
-def make_fn_2d(expr: str):
-    """Parse a math expression in x, y and return f(x, y) → float."""
-    import sympy
-    expr = norm(expr).replace("ln(", "log(")
-    ns = _get_sympy_ns()
-    try:
-        parsed_expr = sympy.sympify(expr, locals=ns)
-        x_sym, y_sym = sympy.Symbol("x"), sympy.Symbol("y")
-        f_lambdified = sympy.lambdify((x_sym, y_sym), parsed_expr, "math")
-
-        def f(xv, yv):
-            try:
-                val = f_lambdified(xv, yv)
-                if isinstance(val, complex) and val.imag == 0:
-                    val = val.real
-                return float(val)
-            except Exception:
-                return float("nan")
-
-        return f
-    except Exception as e:
-        raise ValueError(f"Expresión matemática 2D inválida: {e}")
-
-
-def make_fn_ty(expr: str):
-    """Parse a math expression in t, y and return f(t, y) → float."""
-    import sympy
-    expr = norm(expr).replace("ln(", "log(")
-    ns = _get_sympy_ns()
-    try:
-        parsed_expr = sympy.sympify(expr, locals=ns)
-        t_sym, y_sym = sympy.Symbol("t"), sympy.Symbol("y")
-        f_lambdified = sympy.lambdify((t_sym, y_sym), parsed_expr, "math")
-
-        def f(tv, yv):
-            try:
-                val = f_lambdified(tv, yv)
-                if isinstance(val, complex) and val.imag == 0:
-                    val = val.real
-                return float(val)
-            except Exception:
-                return float("nan")
-
-        return f
-    except Exception as e:
-        raise ValueError(f"Expresión matemática f(t,y) inválida: {e}")
-
-
-# ── Number/cell parsing ────────────────────────────────────────────────────────
 def parse_number_cell(s: str) -> float:
-    """Convert a cell string to float safely using sympy."""
-    import sympy
+    """Convierte una celda a float de forma segura usando sympy."""
     t = s.strip()
     if not t:
         raise ValueError("Celda vacía.")
@@ -135,11 +60,17 @@ def parse_number_cell(s: str) -> float:
         return float(t)
     except ValueError:
         pass
-
-    ns = _get_sympy_ns()
+        
+    MATH_SYMPY_NS = {
+        "pi": sympy.pi, "e": sympy.E, "E": sympy.E,
+        "sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
+        "exp": sympy.exp, "log": sympy.log, "ln": sympy.log,
+        "sqrt": sympy.sqrt, "abs": sympy.Abs,
+        "cbrt": lambda z: sympy.root(z, 3),
+    }
     expr = norm(t).replace("ln(", "log(")
     try:
-        parsed = sympy.sympify(expr, locals=ns)
+        parsed = sympy.sympify(expr, locals=MATH_SYMPY_NS)
         fv = float(parsed.evalf())
         if not math.isfinite(fv):
             raise ValueError(f"Valor no finito: {s!r}")
@@ -147,45 +78,113 @@ def parse_number_cell(s: str) -> float:
     except Exception as e:
         raise ValueError(f"Expresión numérica inválida '{s}': {e}")
 
+def make_fn_2d(expr):
+    expr = norm(expr).replace("ln(", "log(")
+    MATH_SYMPY_NS = {
+        "pi": sympy.pi, "e": sympy.E, "E": sympy.E,
+        "sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
+        "exp": sympy.exp, "log": sympy.log, "ln": sympy.log,
+        "sqrt": sympy.sqrt, "abs": sympy.Abs,
+        "cbrt": lambda z: sympy.root(z, 3),
+    }
+    try:
+        parsed_expr = sympy.sympify(expr, locals=MATH_SYMPY_NS)
+        x_sym, y_sym = sympy.Symbol('x'), sympy.Symbol('y')
+        f_lambdified = sympy.lambdify((x_sym, y_sym), parsed_expr, "math")
+        def f(xv, yv):
+            try:
+                val = f_lambdified(xv, yv)
+                if isinstance(val, complex) and val.imag == 0:
+                    val = val.real
+                return float(val)
+            except Exception:
+                return float('nan')
+        return f
+    except Exception as e:
+        raise ValueError(f"Expresión matemática 2D inválida: {e}")
 
-# ── LaTeX formatting helpers ───────────────────────────────────────────────────
-def _latex_float(x: float, ndec: int) -> str:
-    if not isinstance(x, (int, float)) or not math.isfinite(float(x)):
-        return r"\text{—}"
-    return f"{float(x):.{ndec}f}"
+def make_fn_ty(expr):
+    expr = norm(expr).replace("ln(", "log(")
+    MATH_SYMPY_NS = {
+        "pi": sympy.pi, "e": sympy.E, "E": sympy.E,
+        "sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
+        "exp": sympy.exp, "log": sympy.log, "ln": sympy.log,
+        "sqrt": sympy.sqrt, "abs": sympy.Abs,
+        "cbrt": lambda z: sympy.root(z, 3),
+    }
+    try:
+        parsed_expr = sympy.sympify(expr, locals=MATH_SYMPY_NS)
+        t_sym, y_sym = sympy.Symbol('t'), sympy.Symbol('y')
+        f_lambdified = sympy.lambdify((t_sym, y_sym), parsed_expr, "math")
+        def f(tv, yv):
+            try:
+                val = f_lambdified(tv, yv)
+                if isinstance(val, complex) and val.imag == 0:
+                    val = val.real
+                return float(val)
+            except Exception:
+                return float('nan')
+        return f
+    except Exception as e:
+        raise ValueError(f"Expresión matemática f(t,y) inválida: {e}")
 
-
-def _latex_bound(x: float, ndec: int) -> str:
-    """Format a bound (a or b) in LaTeX without trailing decimals for integers."""
-    if not isinstance(x, (int, float)) or not math.isfinite(float(x)):
-        return "?"
-    xf = float(x)
-    if abs(xf - round(xf)) < 1e-14 * max(1.0, abs(xf)):
-        return str(int(round(xf)))
-    return f"{xf:.{ndec}f}"
-
-
-def _fmt_iter_df(df, decimals: int = 6):
-    """Format float columns of an iteration table to `decimals` decimal places."""
-    fmt = {}
-    for col in df.columns:
-        if hasattr(df[col], "dtype") and str(df[col].dtype).startswith("float"):
-            fmt[col] = f"{{:.{decimals}f}}"
-    return df.style.format(fmt, na_rep="—")
-
+def make_fn_t(expr):
+    import sympy
+    expr = norm(expr).replace("ln(", "log(")
+    MATH_SYMPY_NS = {
+        "pi": sympy.pi, "e": sympy.E, "E": sympy.E,
+        "sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
+        "exp": sympy.exp, "log": sympy.log, "ln": sympy.log,
+        "sqrt": sympy.sqrt, "abs": sympy.Abs,
+        "cbrt": lambda z: sympy.root(z, 3),
+    }
+    try:
+        parsed_expr = sympy.sympify(expr, locals=MATH_SYMPY_NS)
+        t_sym = sympy.Symbol('t')
+        f_lambdified = sympy.lambdify(t_sym, parsed_expr, "math")
+        def f(t):
+            try:
+                val = f_lambdified(t)
+                if isinstance(val, complex) and val.imag == 0:
+                    val = val.real
+                return float(val)
+            except Exception:
+                return float('nan')
+        return f
+    except Exception as e:
+        raise ValueError(f"Expresión matemática f(t) inválida: {e}")
 
 def expr_integrando_latex(expr_py: str) -> str:
-    """Convert a Python f(x) expression to LaTeX (integrand)."""
+    """Convierte la expresión Python de f(x) a LaTeX (integrando)."""
     try:
         from sympy import (
-            Abs, E, cos, exp, latex, log, pi, root, sin, sqrt, sympify, tan,
+            Abs,
+            E,
+            cos,
+            exp,
+            latex,
+            log,
+            pi,
+            root,
+            sin,
+            sqrt,
+            sympify,
+            tan,
         )
 
         s = norm(expr_py).replace("ln(", "log(")
         loc = {
-            "pi": pi, "E": E, "e": E, "exp": exp, "log": log,
-            "sin": sin, "cos": cos, "tan": tan, "sqrt": sqrt,
-            "abs": Abs, "cbrt": lambda z: root(z, 3),
+            "pi": pi,
+            "E": E,
+            "e": E,
+            "exp": exp,
+            "log": log,
+            "sin": sin,
+            "cos": cos,
+            "tan": tan,
+            "sqrt": sqrt,
+            "abs": Abs,
+            "cbrt": lambda z: root(z, 3),
         }
         return latex(sympify(s, locals=loc))
     except Exception:
@@ -201,9 +200,29 @@ def expr_integrando_latex(expr_py: str) -> str:
         )
         return rf"\text{{{t}}}"
 
+def _latex_float(x: float, ndec: int) -> str:
+    if not isinstance(x, (int, float)) or not math.isfinite(float(x)):
+        return r"\text{—}"
+    return f"{float(x):.{ndec}f}"
 
-# ── Shared Streamlit rendering helpers ─────────────────────────────────────────
-def _formulas_panel(algoritmo: str):
+def _latex_bound(x: float, ndec: int) -> str:
+    """Límite a y b en notación LaTeX (enteros sin cola decimal)."""
+    if not isinstance(x, (int, float)) or not math.isfinite(float(x)):
+        return "?"
+    xf = float(x)
+    if abs(xf - round(xf)) < 1e-14 * max(1.0, abs(xf)):
+        return str(int(round(xf)))
+    return f"{xf:.{ndec}f}"
+
+def _fmt_iter_df(df, decimals: int = 6):
+    """Formatea columnas float de una tabla de iteraciones a `decimals` decimales."""
+    fmt = {}
+    for col in df.columns:
+        if hasattr(df[col], 'dtype') and str(df[col].dtype).startswith('float'):
+            fmt[col] = f"{{:.{decimals}f}}"
+    return df.style.format(fmt, na_rep="—")
+
+def _formulas_panel(algoritmo):
     with st.container(border=True):
         st.markdown("### Formulas")
         if algoritmo == "Biseccion":
@@ -301,7 +320,6 @@ def _formulas_panel(algoritmo: str):
         st.caption("Usa `ln(x)` o `log(x)` para logaritmo natural.")
         st.caption("Potencias con `^` o `**`.")
 
-
 def graficar_fx(f, raiz, x_min, x_max, label="f(x)", n=800, expand=0.8, iter_points=None):
     if x_min == x_max:
         x_min -= 1.0
@@ -391,7 +409,6 @@ def graficar_fx(f, raiz, x_min, x_max, label="f(x)", n=800, expand=0.8, iter_poi
     st.altair_chart(chart, use_container_width=True)
     st.caption(f"Rango mostrado: [{xa:.8f}, {xb:.8f}] con {n} muestras.")
 
-
 def mostrar_resultados(res, f_fn, y_col, tooltip_cols, x_range, plot_cfg):
     raiz = res["raiz"]
     with st.container(border=True):
@@ -456,8 +473,8 @@ def mostrar_resultados(res, f_fn, y_col, tooltip_cols, x_range, plot_cfg):
                 p_vals = []
                 for k in range(2, len(errores_positivos)):
                     e_k   = errores_positivos[k]
-                    e_k1  = errores_positivos[k - 1]
-                    e_k2  = errores_positivos[k - 2]
+                    e_k1  = errores_positivos[k-1]
+                    e_k2  = errores_positivos[k-2]
                     if e_k1 > 0 and e_k2 > 0 and e_k > 0:
                         denom = math.log(abs(e_k1 / e_k2))
                         if abs(denom) > 1e-15:
@@ -465,7 +482,7 @@ def mostrar_resultados(res, f_fn, y_col, tooltip_cols, x_range, plot_cfg):
                             if math.isfinite(p) and 0 < p < 10:
                                 p_vals.append(p)
                 if p_vals:
-                    p_est = sum(p_vals[-3:]) / len(p_vals[-3:])
+                    p_est = sum(p_vals[-3:]) / len(p_vals[-3:])  # promedio de los últimos vals
                     st.latex(rf"p \approx \frac{{\ln|e_{{n+1}}/e_n|}}{{\ln|e_n/e_{{n-1}}|}} \approx {p_est:.4f}")
                     if p_est < 1.3:
                         st.caption("⚡ Convergencia **lineal** (p ≈ 1). Típico de Bisección y Punto Fijo.")

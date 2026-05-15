@@ -14,7 +14,7 @@ class DashboardModule(ABC):
         pass
 
     @abstractmethod
-    def render(self):
+    def render(self, **kwargs):
         """Render the Streamlit UI for this module."""
         pass
 

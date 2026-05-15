@@ -17,7 +17,7 @@ class DiferenciasFinitasModule(DashboardModule):
     def name(self) -> str:
         return "Diferencias Finitas"
 
-    def render(self):
+    def render(self, **kwargs):
         main_col, side_col = st.columns([2.3, 1.0], gap="large")
         with main_col:
             with st.expander("📐 Ver fórmulas de Diferencias Finitas Centradas", expanded=True):
