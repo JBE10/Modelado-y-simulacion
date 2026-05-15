@@ -132,7 +132,7 @@ def comparar_metodos(t, x_original, z_ruidosa, grado_poly=8, factor_spline=5,
     x_kalman, _, _ = filtro_kalman(z_ruidosa, Q=Q, R=R)
 
     metricas = {
-        "Ruidosa": {
+        "Señal ruidosa": {
             "mse": calcular_mse(x_original, z_ruidosa),
             "snr": calcular_snr(x_original, z_ruidosa),
         },

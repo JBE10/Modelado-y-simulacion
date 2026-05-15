@@ -259,9 +259,9 @@ err_poly     = np.abs(x_original - res["polinomio"])
 err_spline   = np.abs(x_original - res["spline"])
 err_kalman   = np.abs(x_original - res["kalman"])
 
-ax.plot(t_ms, err_ruidosa, color="#94a3b8", linewidth=0.5, alpha=0.4, label="Ruidosa")
+ax.plot(t_ms, err_ruidosa, color="#94a3b8", linewidth=0.5, alpha=0.4, label="Señal ruidosa")
 ax.plot(t_ms, err_poly,    color="#ef4444", linewidth=0.8, alpha=0.6, label="Polinomio")
-ax.plot(t_ms, err_spline,  color="#eab308", linewidth=0.8, alpha=0.6, label="Spline")
+ax.plot(t_ms, err_spline,  color="#eab308", linewidth=0.8, alpha=0.6, label="Spline cúbico")
 ax.plot(t_ms, err_kalman,  color="#22c55e", linewidth=1.2, alpha=0.9, label="Kalman")
 ax.set_xlabel("Tiempo (ms)")
 ax.set_ylabel("|Error|")
@@ -275,9 +275,9 @@ print("  ✓ fig5_error_comparacion.png guardada")
 # ── Figura 6: Tabla de métricas como gráfico de barras ────────────────────────
 fig6, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-nombres = ["Ruidosa", "Polinomio", "Spline", "Kalman"]
-mse_vals = [metricas[k]["mse"] for k in metricas]
-snr_vals = [metricas[k]["snr"] for k in metricas]
+nombres = list(metricas.keys())
+mse_vals = [m["mse"] for m in metricas.values()]
+snr_vals = [m["snr"] for m in metricas.values()]
 colores = ["#94a3b8", "#ef4444", "#eab308", "#22c55e"]
 
 bars1 = ax1.bar(nombres, mse_vals, color=colores, edgecolor="#1e293b", linewidth=1.5)

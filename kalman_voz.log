@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.3.1)  24 APR 2026 15:41
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.3.1)  11 MAY 2026 10:12
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -575,12 +575,25 @@ LaTeX Info: Redefining \% on input line 1.
 
 {/usr/local/texlive/2026/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{/usr/loc
 al/texlive/2026/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc}] [2] [3] [
-4]
+4] [5]
 Package hyperref Info: bookmark level for unknown lstlisting defaults to 0 on i
 nput line 247.
 LaTeX Font Info:    Font shape `T1/cmtt/bx/n' in size <10.95> not available
 (Font)              Font shape `T1/cmtt/m/n' tried instead on input line 248.
- [5] [6] [7] [8] (./kalman_voz.aux
+ [6]
+<fig4_voz_comparacion.png, id=217, 1002.6258pt x 732.8178pt>
+File: fig4_voz_comparacion.png Graphic file (type png)
+<use fig4_voz_comparacion.png>
+Package pdftex.def Info: fig4_voz_comparacion.png  used on input line 330.
+(pdftex.def)             Requested size: 455.24411pt x 332.73933pt.
+ [7]
+<fig6_metricas_barras.png, id=239, 858.0858pt x 356.532pt>
+File: fig6_metricas_barras.png Graphic file (type png)
+<use fig6_metricas_barras.png>
+Package pdftex.def Info: fig6_metricas_barras.png  used on input line 339.
+(pdftex.def)             Requested size: 409.71692pt x 170.23576pt.
+ [8 <./fig4_voz_comparacion.png>] [9 <./fig6_metricas_barras.png>] [10] (./kalm
+an_voz.aux
 LaTeX Info: Redefining \. on input line 11.
 LaTeX Info: Redefining \% on input line 11.
 )
@@ -589,13 +602,13 @@ LaTeX2e <2025-11-01>
 L3 programming layer <2026-01-19>
  ***********
 Package rerunfilecheck Info: File `kalman_voz.out' has not changed.
-(rerunfilecheck)             Checksum: 6CDCE8F3A208E4CD76E60BC6AFD4E6CD;4116.
+(rerunfilecheck)             Checksum: 032915F1A158767B93E5411CAA9E2A51;4318.
  ) 
 Here is how much of TeX's memory you used:
- 15390 strings out of 467525
- 231761 string characters out of 5418983
+ 15415 strings out of 467525
+ 232350 string characters out of 5418983
  990909 words of memory out of 5000000
- 44015 multiletter control sequences out of 15000+600000
+ 44035 multiletter control sequences out of 15000+600000
  646767 words of font info for 92 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  75i,12n,79p,1139b,2044s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -622,10 +635,10 @@ t/fonts/type1/public/cm-super/sfrm2074.pfb></usr/local/texlive/2026/texmf-dist/
 fonts/type1/public/cm-super/sfti1200.pfb></usr/local/texlive/2026/texmf-dist/fo
 nts/type1/public/cm-super/sftt1095.pfb></usr/local/texlive/2026/texmf-dist/font
 s/type1/public/cm-super/sftt1200.pfb>
-Output written on kalman_voz.pdf (8 pages, 411718 bytes).
+Output written on kalman_voz.pdf (10 pages, 825680 bytes).
 PDF statistics:
- 363 PDF objects out of 1000 (max. 8388607)
- 303 compressed objects within 4 object streams
- 95 named destinations out of 1000 (max. 500000)
- 185 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 386 PDF objects out of 1000 (max. 8388607)
+ 320 compressed objects within 4 object streams
+ 100 named destinations out of 1000 (max. 500000)
+ 203 words of extra memory for PDF output out of 10000 (max. 10000000)
 
