@@ -17,7 +17,7 @@ PRESETS = {
     "Apolo 11 (Misión Lunar)": {
         "stages": [
             {"name": "S-IC (Etapa 1)", "T": 34000000, "m_p": 2100000, "m_d": 130000, "md": 13000},
-            {"name": "S-II (Etapa 2)", "T": 4400000, "m_p": 450000, "m_d": 36000, "md": 1100},
+            {"name": "S-II (Etapa 2)", "T": 5150000, "m_p": 450000, "m_d": 36000, "md": 1100},
             {"name": "S-IVB (Etapa 3 / TLI)", "T": 1000000, "m_p": 110000, "m_d": 10000, "md": 230},
         ],
         "pay": 45000, "bal": 300000,
@@ -107,14 +107,18 @@ class CoheteModule(DashboardModule):
                     z_clean = z_vals[np.isfinite(z_vals)]; v_clean = v_vals[np.isfinite(v_vals)]
                     max_alt = np.max(z_clean) / 1000 if len(z_clean) > 0 else 0
                     max_vel = np.max(v_clean) if len(v_clean) > 0 else 0
+                    
+                    max_q_val = np.max(res["q"]) / 1000.0
+                    max_q_idx = np.argmax(res["q"])
+                    max_q_t = res["t"][max_q_idx]
 
                     with st.container(border=True):
-                        mc1, mc2, mc3 = st.columns(3)
+                        mc1, mc2, mc3, mc4 = st.columns(4)
                         mc1.metric("Apogeo", f"{max_alt:,.1f} km")
                         mc2.metric("Velocidad Máxima", f"{max_vel:,.0f} m/s", f"Mach {max_vel/343:.1f}" if max_vel > 0 else "0")
-                        mc3.metric("Masa Final", f"{res['m'][-1]:.0f} kg")
+                        mc3.metric("Max-Q", f"{max_q_val:,.1f} kPa", f"t={max_q_t:.0f}s")
+                        mc4.metric("Masa Final", f"{res['m'][-1]:.0f} kg")
 
-                    # Three.js 3D visualization
                     Re_m = 6371000.0
                     phi = res["x"] / Re_m
                     X_3d = (Re_m + res["z"]) * np.sin(phi)
@@ -130,19 +134,68 @@ class CoheteModule(DashboardModule):
                             trajectory_data.append({
                                 "x": float(X_3d[i]), "y": float(Y_3d[i]), "z": float(Z_3d[i]),
                                 "f": res["etapa"][i], "v": float(np.sqrt(res["vx"][i]**2 + res["vz"][i]**2)),
-                                "t": float(res["t"][i])
+                                "t": float(res["t"][i]), "g": float(res["g_force"][i]), "q": float(res["q"][i])
                             })
 
                     three_js_code = f"""
 <!DOCTYPE html><html><head><style>
 body {{ margin: 0; background-color: #000; overflow: hidden; }}
 #info {{ position: absolute; top: 10px; left: 10px; color: white;
-font-family: 'Segoe UI', sans-serif; pointer-events: none;
-text-shadow: 1px 1px 2px black; font-size: 13px; }}
+font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; pointer-events: none;
+text-shadow: 1px 1px 3px black; font-size: 13px; z-index: 10; line-height: 1.5; }}
+#controls-panel {{
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px;
+    padding: 8px 16px; display: flex; align-items: center; gap: 12px;
+    color: white; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    z-index: 100; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+}}
+.btn {{
+    background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    font-weight: 600; font-size: 12px; transition: all 0.2s; outline: none;
+}}
+.btn:hover {{ background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.4); }}
+.btn:active {{ transform: scale(0.95); }}
+select {{
+    background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white; padding: 6px; border-radius: 6px; font-size: 12px; cursor: pointer; outline: none;
+}}
+input[type="range"] {{
+    -webkit-appearance: none; width: 180px; height: 6px;
+    background: rgba(255, 255, 255, 0.2); border-radius: 3px; outline: none;
+}}
+input[type="range"]::-webkit-slider-thumb {{
+    -webkit-appearance: none; appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: #00aaff; cursor: pointer; box-shadow: 0 0 5px #00aaff;
+}}
 </style></head><body>
-<div id="info"><b>MISSION CONTROL</b><br>
-Altitud: <span id="alt">0</span> km | Vel: <span id="vel">0</span> m/s<br>
-Fase: <span id="stage">-</span></div>
+<div id="info">
+  <b>MISSION CONTROL</b><br>
+  Altitud: <span id="alt">0</span> km<br>
+  Velocidad: <span id="vel">0</span> m/s<br>
+  Fuerza G: <span id="gforce">1.0</span> G<br>
+  Pres. Dinámica: <span id="pres">0.0</span> kPa<br>
+  Fase: <span id="stage">-</span>
+</div>
+<div id="controls-panel">
+    <button class="btn" id="playBtn">⏸ Pause</button>
+    <button class="btn" id="resetBtn">🔄 Reset</button>
+    <input type="range" id="timeline" min="0" value="0">
+    <span style="font-size: 11px; white-space: nowrap;">Cámara:</span>
+    <select id="camSelect">
+        <option value="Libre">Libre</option>
+        <option value="Cabina">Cabina</option>
+        <option value="Persecución">Persecución</option>
+    </select>
+    <span style="font-size: 11px; white-space: nowrap;">Vel:</span>
+    <select id="speedSelect">
+        <option value="0.2">0.2x</option><option value="0.5">0.5x</option>
+        <option value="1">1.0x</option><option value="2">2.0x</option>
+        <option value="5">5.0x</option><option value="10">10.0x</option>
+    </select>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
@@ -150,11 +203,13 @@ const trajectory = {trajectory_data};
 const numSats = {num_satellites};
 const showMoon = {str(show_moon).lower()};
 const showOrbits = {str(show_orbits).lower()};
-const cameraMode = "{camera_mode}";
-const playbackSpeed = {playback_speed};
+let cameraMode = "{camera_mode}";
+let playbackSpeed = {playback_speed};
+let isPaused = false;
 let scene, camera, renderer, controls, earth, rocket, moon, rocketTrail, exhaust;
-let rocketParts = [], currentStageName = "", debrisList = [], satellites = [], animIndex = 0;
+let rocketParts = [], currentStageName = "", debrisList = [], satellites = [], animIndex = 0, lastIdx = -1;
 const RE = 6371;
+
 function init() {{
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 10000000);
@@ -163,123 +218,292 @@ function init() {{
     document.body.appendChild(renderer.domElement);
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.target.set(0, RE, 0);
+    
     scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.8);
-    sun.position.set(RE*20, RE*10, RE*20); scene.add(sun);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.8); sun.position.set(RE*20, RE*10, RE*20); scene.add(sun);
+    
     const loader = new THREE.TextureLoader();
-    earth = new THREE.Mesh(new THREE.SphereGeometry(RE, 64, 64),
-        new THREE.MeshPhongMaterial({{ color: 0x224488, shininess: 10 }}));
-    loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg', (tex) => {{ earth.material.map = tex; earth.material.needsUpdate = true; }});
+    earth = new THREE.Mesh(new THREE.SphereGeometry(RE, 64, 64), new THREE.MeshPhongMaterial({{ color: 0x224488 }}));
+    loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg', (tex) => {{
+        earth.material.map = tex;
+        earth.material.color.set(0xffffff);
+        earth.material.needsUpdate = true;
+    }});
     scene.add(earth);
-    scene.add(new THREE.Mesh(new THREE.SphereGeometry(RE*1.015, 64, 64),
-        new THREE.MeshBasicMaterial({{ color: 0x00aaff, transparent: true, opacity: 0.1, side: THREE.BackSide }})));
+    
+    const atmosGeom = new THREE.SphereGeometry(RE * 1.015, 64, 64);
+    const atmosMat = new THREE.MeshBasicMaterial({{
+        color: 0x00aaff,
+        transparent: true,
+        opacity: 0.12,
+        side: THREE.BackSide
+    }});
+    const atmosphere = new THREE.Mesh(atmosGeom, atmosMat);
+    scene.add(atmosphere);
+
     if (showMoon) {{
         moon = new THREE.Mesh(new THREE.SphereGeometry(1737, 32, 32), new THREE.MeshPhongMaterial({{ color: 0xaaaaaa }}));
-        loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg', (tex) => {{ moon.material.map = tex; moon.material.needsUpdate = true; }});
+        loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg', (tex) => {{
+            moon.material.map = tex;
+            moon.material.needsUpdate = true;
+        }});
         moon.position.set(0, 0, 384400); scene.add(moon);
+        
+        const moonOrbitPts = [];
+        for (let i = 0; i <= 128; i++) {{
+            const a = (i / 128) * Math.PI * 2;
+            moonOrbitPts.push(new THREE.Vector3(384400 * Math.sin(a), 0, 384400 * Math.cos(a)));
+        }}
+        const moonOrbitGeom = new THREE.BufferGeometry().setFromPoints(moonOrbitPts);
+        const moonOrbitLine = new THREE.Line(moonOrbitGeom, new THREE.LineBasicMaterial({{ color: 0x444444, transparent: true, opacity: 0.3 }}));
+        scene.add(moonOrbitLine);
     }}
-    const starsPos = [];
-    for(let i=0; i<25000; i++) starsPos.push((Math.random()-0.5)*RE*600, (Math.random()-0.5)*RE*600, (Math.random()-0.5)*RE*600);
-    const starsGeom = new THREE.BufferGeometry();
-    starsGeom.setAttribute('position', new THREE.Float32BufferAttribute(starsPos, 3));
-    scene.add(new THREE.Points(starsGeom, new THREE.PointsMaterial({{ color: 0xffffff, size: 2 }})));
+    
     rocket = new THREE.Group();
     const stagesFound = [...new Set(trajectory.map(p => p.f))];
     stagesFound.forEach((name, i) => {{
         const part = new THREE.Group(); part.userData.name = name;
-        if (name.includes("Carga") || name.includes("Orion")) {{
-            const nose = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.2, 16), new THREE.MeshStandardMaterial({{ color: 0xffffff, metalness: 0.4 }}));
-            nose.position.y = 2.0; part.add(nose);
-        }} else {{
-            const h = 2.0;
-            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, h, 16), new THREE.MeshStandardMaterial({{ color: 0xcccccc, metalness: 0.6 }}));
-            body.position.y = (stagesFound.length - 2 - i) * h; part.add(body);
-            if (i === 0) {{
-                const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.5, 12), new THREE.MeshStandardMaterial({{ color: 0x111111 }}));
-                eng.position.y = body.position.y - 1.25; part.add(eng);
-            }}
+        const h = 2.0; const r_stage = 0.3;
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(r_stage, r_stage, h, 16), new THREE.MeshStandardMaterial({{ color: 0xcccccc, metalness: 0.5, roughness: 0.3 }}));
+        body.position.y = (stagesFound.length - 2 - i) * h; part.add(body);
+        
+        if (i === stagesFound.length - 1 || name.includes("Carga") || name.includes("Payload") || name.includes("Orion")) {{
+            const cone = new THREE.Mesh(new THREE.ConeGeometry(r_stage, 1.2, 16), new THREE.MeshStandardMaterial({{ color: 0xdd4444, metalness: 0.4, roughness: 0.4 }}));
+            cone.position.y = (stagesFound.length - 2 - i) * h + h/2 + 0.6;
+            part.add(cone);
         }}
+        
         rocketParts.push(part); rocket.add(part);
     }});
-    exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.35, 3.0, 12),
-        new THREE.MeshBasicMaterial({{ color: 0xffaa00, transparent: true, opacity: 0.8 }}));
-    exhaust.position.y = -4.5; exhaust.rotation.x = Math.PI; rocket.add(exhaust);
-    rocket.rotateX(Math.PI/2); scene.add(rocket);
+    
+    exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.35, 3.0, 12), new THREE.MeshBasicMaterial({{ color: 0xffaa00, transparent: true, opacity: 0.8 }}));
+    exhaust.position.y = -(stagesFound.length - 1) * 2.0 - 1.5; exhaust.rotation.x = Math.PI; rocket.add(exhaust);
+    scene.add(rocket);
+    
     rocketTrail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({{ color: 0xffaa00, linewidth: 2 }}));
     scene.add(rocketTrail);
-    if (cameraMode === "Libre") {{ camera.position.set(RE*0.1, RE*0.1, RE*1.05); camera.lookAt(0, 0, RE); }}
-    for(let i=0; i<numSats; i++) {{
-        const s = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.3), new THREE.MeshStandardMaterial({{ color: 0xcccccc }}));
-        const r = RE + 300 + Math.random()*2500, sp = 0.0003 + Math.random()*0.0008;
-        const ang = Math.random()*Math.PI*2, inc = (Math.random()-0.5)*Math.PI*0.7;
-        satellites.push({{ m: s, r: r, sp: sp, ang: ang, inc: inc }}); scene.add(s);
-        if(showOrbits) {{
-            const o = new THREE.Mesh(new THREE.TorusGeometry(r, 0.05, 2, 100), new THREE.MeshBasicMaterial({{ color: 0xffffff, transparent: true, opacity: 0.1 }}));
-            o.rotation.x = Math.PI/2; o.rotation.y = inc; scene.add(o);
+    
+    createSatellites();
+    
+    const timeline = document.getElementById('timeline');
+    timeline.max = trajectory.length - 1;
+    
+    document.getElementById('playBtn').addEventListener('click', () => {{
+        isPaused = !isPaused;
+        document.getElementById('playBtn').innerText = isPaused ? "▶ Play" : "⏸ Pause";
+    }});
+    
+    document.getElementById('resetBtn').addEventListener('click', () => {{
+        animIndex = 0;
+        resetStaging();
+        updateSimulationToFrame(0);
+    }});
+    
+    timeline.addEventListener('input', (e) => {{
+        const val = parseInt(e.target.value);
+        if (val < animIndex) {{
+            resetStaging();
         }}
-    }}
+        animIndex = val;
+        updateSimulationToFrame(val);
+    }});
+    
+    document.getElementById('camSelect').addEventListener('change', (e) => {{
+        cameraMode = e.target.value;
+    }});
+    
+    document.getElementById('speedSelect').addEventListener('change', (e) => {{
+        playbackSpeed = parseFloat(e.target.value);
+    }});
+    
+    window.addEventListener('resize', onWindowResize);
+    
     animate();
 }}
+
+function createSatellites() {{
+    for(let i=0; i<numSats; i++) {{
+        const satGeom = new THREE.BoxGeometry(20, 20, 40);
+        const satMat = new THREE.MeshStandardMaterial({{ color: 0xaaaaaa }});
+        const sat = new THREE.Mesh(satGeom, satMat);
+        const orbitRadius = RE + 300 + Math.random() * 1500;
+        const speed = 0.0005 + Math.random() * 0.001;
+        const angle = Math.random() * Math.PI * 2;
+        const inclination = (Math.random() - 0.5) * Math.PI * 0.6;
+        
+        satellites.push({{ mesh: sat, radius: orbitRadius, speed: speed, angle: angle, inc: inclination }});
+        scene.add(sat);
+        
+        if (showOrbits) {{
+            const orbitGeom = new THREE.RingGeometry(orbitRadius, orbitRadius+2, 64);
+            orbitGeom.rotateX(Math.PI/2);
+            orbitGeom.rotateZ(inclination);
+            const orbitMat = new THREE.MeshBasicMaterial({{ color: 0x444444, side: THREE.DoubleSide, opacity: 0.15, transparent: true }});
+            const orbit = new THREE.Mesh(orbitGeom, orbitMat);
+            scene.add(orbit);
+        }}
+    }}
+}}
+
+function updateSatellites() {{
+    satellites.forEach(s => {{
+        s.angle += s.speed;
+        const x = s.radius * Math.cos(s.angle);
+        const z = s.radius * Math.sin(s.angle);
+        s.mesh.position.set(x, z * Math.sin(s.inc), z * Math.cos(s.inc));
+        s.mesh.lookAt(0,0,0);
+    }});
+}}
+
 function separatePart(part, forward) {{
     if (!part || !part.parent) return;
-    const worldPos = new THREE.Vector3(), worldQuat = new THREE.Quaternion();
-    part.getWorldPosition(worldPos); part.getWorldQuaternion(worldQuat);
-    rocket.remove(part); scene.add(part);
-    part.position.copy(worldPos); part.quaternion.copy(worldQuat);
-    debrisList.push({{ mesh: part, vel: forward.clone().multiplyScalar(-0.2).add(new THREE.Vector3((Math.random()-0.5)*0.05, -0.1, 0)) }});
+    const worldPos = new THREE.Vector3();
+    const worldQuat = new THREE.Quaternion();
+    part.getWorldPosition(worldPos);
+    part.getWorldQuaternion(worldQuat);
+    rocket.remove(part);
+    scene.add(part);
+    part.position.copy(worldPos);
+    part.quaternion.copy(worldQuat);
+    const debrisVel = forward.clone().multiplyScalar(-0.5).add(
+        new THREE.Vector3((Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1)
+    );
+    debrisList.push({{ mesh: part, vel: debrisVel }});
 }}
+
+function resetStaging() {{
+    debrisList.forEach(d => scene.remove(d.mesh));
+    debrisList = [];
+    rocketParts.forEach(part => {{
+        if (part.parent !== rocket) {{
+            scene.remove(part);
+            rocket.add(part);
+        }}
+        part.position.set(0, 0, 0);
+        part.rotation.set(0, 0, 0);
+    }});
+    currentStageName = "";
+}}
+
+function updateSimulationToFrame(idx) {{
+    if (idx < 0 || idx >= trajectory.length) return;
+    const p = trajectory[idx];
+    const pos = new THREE.Vector3(p.x/1000, p.y/1000, p.z/1000);
+    
+    if (idx < lastIdx) {{
+        resetStaging();
+    }}
+    
+    if (p.f !== currentStageName) {{
+        const stagesFound = [...new Set(trajectory.map(pt => pt.f))];
+        const currentStageIdx = stagesFound.indexOf(p.f);
+        rocketParts.forEach(part => {{
+            const partStageIdx = stagesFound.indexOf(part.userData.name);
+            if (part.parent === rocket && partStageIdx < currentStageIdx && currentStageIdx !== -1) {{
+                let forward = new THREE.Vector3(0, 1, 0);
+                if (idx > 0) {{
+                    const prevP = trajectory[idx-1];
+                    forward.set(pos.x - prevP.x/1000, pos.y - prevP.y/1000, pos.z - prevP.z/1000).normalize();
+                }}
+                separatePart(part, forward);
+            }}
+        }});
+        currentStageName = p.f;
+    }}
+    
+    rocket.position.copy(pos);
+    let forward = new THREE.Vector3();
+    if (idx > 0) {{
+        const prevP = trajectory[idx-1];
+        forward.set(pos.x - prevP.x/1000, pos.y - prevP.y/1000, pos.z - prevP.z/1000).normalize();
+    }} else {{
+        forward.copy(pos).normalize();
+    }}
+    if (forward.lengthSq() > 0.001) {{
+        const targetPos = pos.clone().add(forward);
+        rocket.lookAt(targetPos);
+        rocket.rotateX(Math.PI/2);
+    }}
+    
+    const isBallistic = p.f.includes("Carga") || p.f.includes("Payload") || p.f.includes("Orion");
+    exhaust.visible = !isBallistic;
+    if (exhaust.visible) {{
+        exhaust.scale.set(1, 0.8 + Math.random() * 0.5, 1);
+    }}
+    
+    const trailPoints = [];
+    const step = Math.max(1, Math.floor(idx / 500));
+    for (let i = 0; i <= idx; i += step) {{
+        trailPoints.push(new THREE.Vector3(trajectory[i].x/1000, trajectory[i].y/1000, trajectory[i].z/1000));
+    }}
+    if (trailPoints.length > 0 && trailPoints[trailPoints.length-1].distanceTo(pos) > 1.0) {{
+        trailPoints.push(pos.clone());
+    }}
+    rocketTrail.geometry.setFromPoints(trailPoints);
+    
+    if (showMoon && moon) {{
+        const moonAngle = (p.t / 2358720) * Math.PI * 2;
+        moon.position.set(384400 * Math.sin(moonAngle), 0, 384400 * Math.cos(moonAngle));
+    }}
+    
+    const altitude = Math.sqrt(pos.x**2 + pos.y**2 + pos.z**2) - RE;
+    document.getElementById('alt').innerText = altitude.toFixed(1);
+    document.getElementById('vel').innerText = Math.round(p.v);
+    document.getElementById('gforce').innerText = p.g.toFixed(2);
+    document.getElementById('pres').innerText = (p.q / 1000).toFixed(2);
+    document.getElementById('stage').innerText = p.f;
+    document.getElementById('timeline').value = idx;
+    
+    if (cameraMode === "Cabina") {{
+        controls.enabled = false;
+        const camPos = pos.clone().addScaledVector(forward, 0.8);
+        camera.position.copy(camPos);
+        camera.lookAt(pos.clone().addScaledVector(forward, 10));
+    }} else if (cameraMode === "Persecución") {{
+        controls.enabled = false;
+        const camOffset = forward.clone().multiplyScalar(-30).add(new THREE.Vector3(0, 10, 0));
+        camera.position.copy(pos.clone().add(camOffset));
+        camera.lookAt(pos);
+    }} else {{
+        controls.enabled = true;
+        controls.target.copy(pos);
+        controls.update();
+    }}
+    
+    lastIdx = idx;
+}}
+
 function animate() {{
     requestAnimationFrame(animate);
-    const idx = Math.floor(animIndex);
-    if (idx < trajectory.length) {{
-        const p = trajectory[idx];
-        const x = p.x/1000, y = p.y/1000, z = p.z/1000;
-        rocket.position.set(x, y, z);
-        let forward = new THREE.Vector3();
-        if (idx > 0) {{ const prev = trajectory[idx-1]; forward.set(x-prev.x/1000, y-prev.y/1000, z-prev.z/1000).normalize(); }}
-        else forward.set(x, y, z).normalize();
-        rocket.lookAt(new THREE.Vector3(x, y, z).add(forward));
-        if (moon) {{
-            const moonAngle = (p.t / 2358720) * Math.PI * 2;
-            moon.position.x = 384400 * Math.sin(moonAngle);
-            moon.position.z = 384400 * Math.cos(moonAngle);
+    if (!isPaused) {{
+        if (animIndex < trajectory.length - 1) {{
+            animIndex = Math.min(animIndex + playbackSpeed, trajectory.length - 1);
+            updateSimulationToFrame(Math.floor(animIndex));
+        }} else {{
+            isPaused = true;
+            document.getElementById('playBtn').innerText = "▶ Play";
         }}
-        exhaust.visible = !(p.f.includes("Carga") || p.f.includes("Orion"));
-        if (exhaust.visible) exhaust.scale.set(1, 0.8 + Math.random()*0.4, 1);
-        if (p.f !== currentStageName) {{
-            rocketParts.forEach(part => {{
-                if (part.parent === rocket && part.userData.name !== p.f && currentStageName !== "") {{
-                    if (trajectory.findIndex(tp => tp.f === part.userData.name) < trajectory.findIndex(tp => tp.f === p.f))
-                        separatePart(part, forward);
-                }}
-            }});
-            currentStageName = p.f;
-        }}
-        const points = [];
-        const start = Math.max(0, idx - 1000);
-        for(let i=start; i<=idx; i++) points.push(new THREE.Vector3(trajectory[i].x/1000, trajectory[i].y/1000, trajectory[i].z/1000));
-        rocketTrail.geometry.setFromPoints(points);
-        document.getElementById('alt').innerText = (Math.sqrt(x*x+y*y+z*z)-RE).toFixed(1);
-        document.getElementById('vel').innerText = Math.round(p.v);
-        document.getElementById('stage').innerText = p.f;
-        if (cameraMode === "Cabina") {{
-            controls.enabled = false;
-            camera.position.copy(rocket.position).addScaledVector(forward, 2.5);
-            camera.lookAt(rocket.position.clone().addScaledVector(forward, 10));
-        }} else if (cameraMode === "Persecución") {{
-            controls.enabled = false;
-            const camOffset = forward.clone().multiplyScalar(-25).add(new THREE.Vector3(0, 8, 0));
-            camera.position.lerp(rocket.position.clone().add(camOffset), 0.1);
-            camera.lookAt(rocket.position);
-        }} else {{ controls.enabled = true; controls.update(); }}
-        animIndex += playbackSpeed;
-    }} else {{ controls.enabled = true; controls.update(); }}
-    debrisList.forEach(d => {{ d.mesh.position.add(d.vel); d.mesh.rotation.x += 0.01; d.mesh.rotation.z += 0.005; }});
-    if (moon) moon.rotation.y += 0.001;
-    satellites.forEach(s => {{ s.ang += s.sp; s.m.position.set(s.r*Math.cos(s.ang), s.r*Math.sin(s.ang)*Math.sin(s.inc), s.r*Math.sin(s.ang)*Math.cos(s.inc)); }});
-    earth.rotation.y += 0.0005;
+    }}
+    debrisList.forEach(d => {{
+        d.mesh.position.add(d.vel);
+        d.mesh.rotation.x += 0.01;
+        d.mesh.rotation.z += 0.005;
+    }});
+    updateSatellites();
+    earth.rotation.y += 0.0002;
+    if (moon) {{
+        moon.rotation.y += 0.0005;
+    }}
     renderer.render(scene, camera);
 }}
+
+function onWindowResize() {{
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}}
+
 init();
 </script></body></html>"""
                     st.components.v1.html(three_js_code, height=600)
@@ -303,12 +527,28 @@ init();
                         st.altair_chart((base + c_tierra + c_luna).properties(height=600), use_container_width=True)
 
                     with st.container(border=True):
-                        st.markdown("### 📉 Evolución de Variables")
+                        st.markdown("### 📉 Gráficos de Telemetría")
+                        tab1, tab2, tab3 = st.tabs(["Altitud y Velocidad", "Fuerza G y Presión Dinámica", "Masa y Consumo"])
                         df_res = pd.DataFrame({
-                            "Tiempo (s)": res["t"], "Altitud (m)": res["z"],
-                            "Dist. Horizontal (m)": res["x"], "Vel. Vertical (m/s)": res["vz"],
-                            "Vel. Horizontal (m/s)": res["vx"], "Masa (kg)": res["m"], "Fase": res["etapa"],
+                            "Tiempo (s)": res["t"], "Altitud (km)": res["z"] / 1000.0,
+                            "Velocidad (m/s)": np.sqrt(res["vx"]**2 + res["vz"]**2),
+                            "Fuerza G (G)": res["g_force"], "Presión Dinámica (kPa)": res["q"] / 1000.0,
+                            "Masa (kg)": res["m"], "Fase": res["etapa"],
                         })
+                        with tab1:
+                            c_alt = alt.Chart(df_res).mark_line(color="#00aaff").encode(x="Tiempo (s):Q", y="Altitud (km):Q").properties(title="Perfil de Altitud")
+                            c_vel = alt.Chart(df_res).mark_line(color="#ffaa00").encode(x="Tiempo (s):Q", y="Velocidad (m/s):Q").properties(title="Perfil de Velocidad")
+                            st.altair_chart(c_alt, use_container_width=True); st.altair_chart(c_vel, use_container_width=True)
+                        with tab2:
+                            c_g = alt.Chart(df_res).mark_line(color="#ff4d4d").encode(x="Tiempo (s):Q", y="Fuerza G (G):Q").properties(title="Fuerza G")
+                            c_q = alt.Chart(df_res).mark_line(color="#10b981").encode(x="Tiempo (s):Q", y="Presión Dinámica (kPa):Q").properties(title="Presión Dinámica")
+                            st.altair_chart(c_g, use_container_width=True); st.altair_chart(c_q, use_container_width=True)
+                        with tab3:
+                            c_mass = alt.Chart(df_res).mark_line(color="#8b5cf6").encode(x="Tiempo (s):Q", y="Masa (kg):Q").properties(title="Masa del Cohete")
+                            st.altair_chart(c_mass, use_container_width=True)
+
+                    with st.container(border=True):
+                        st.markdown("### 📉 Datos Completos")
                         st.dataframe(df_res.iloc[::max(1, len(df_res) // 100)], hide_index=True, use_container_width=True)
 
                 except Exception as e:

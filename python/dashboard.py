@@ -28,6 +28,7 @@ from ui_modules.comparar_raices_module    import CompararRaicesModule
 from ui_modules.diferencias_finitas_module   import DiferenciasFinitasModule
 from ui_modules.integracion_numerica_module  import IntegracionNumericaModule
 from ui_modules.ecuaciones_diferenciales_module import EdoModule
+from ui_modules.sistemas_dinamicos_module import SistemasDinamicosModule
 from ui_modules.simulacion_sir_module     import SirModule
 from ui_modules.cohete_module             import CoheteModule
 from ui_modules.monte_carlo_module        import MonteCarloModule
@@ -55,6 +56,7 @@ def main():
     factory.register_module(DiferenciasFinitasModule())
     factory.register_module(IntegracionNumericaModule())
     factory.register_module(EdoModule())
+    factory.register_module(SistemasDinamicosModule())
     factory.register_module(SirModule())
     factory.register_module(CoheteModule())
     factory.register_module(MonteCarloModule())

@@ -12,8 +12,8 @@ if [[ ! -x .venv/bin/streamlit ]]; then
 fi
 
 # Run the new modular dashboard
-echo "Launching Modular Dashboard (main_pro.py)..."
-exec .venv/bin/python -m streamlit run python/main_pro.py \
+echo "Launching Modular Dashboard (rocket_pro_dashboard.py)..."
+exec .venv/bin/python -m streamlit run python/rocket_pro_dashboard.py \
   --server.address=127.0.0.1 \
   --server.port=8501 \
   --browser.gatherUsageStats=false

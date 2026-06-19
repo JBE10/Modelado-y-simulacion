@@ -59,7 +59,11 @@ class Rocket:
 
 class PhysicsModel(ABC):
     @abstractmethod
-    def get_derivatives(self, t, state, thrust, burn_rate):
+    def get_derivatives(self, t, state, thrust, burn_rate, current_mass):
+        pass
+
+    @abstractmethod
+    def get_telemetry_vars(self, state, thrust, current_mass):
         pass
 
 class EarthRocketPhysics(PhysicsModel):
@@ -74,25 +78,40 @@ class EarthRocketPhysics(PhysicsModel):
     def get_derivatives(self, t, state, thrust, burn_rate, current_mass):
         x, z, vx, vz = state[:4]
         
+        # Clampear z para evitar overflow/inestabilidad cuando z < 0
+        z_safe = max(0.0, z)
+        
         # Gravity (Central Field)
-        r = self.Re + z
+        r = self.Re + z_safe
         g = self.g0 * (self.Re / r)**2
         
         # Atmosphere (Simplified exponential)
-        rho = self.rho0 * np.exp(-z / self.H) if z < 120000 else 0.0
+        rho = self.rho0 * np.exp(-z_safe / self.H) if z_safe < 120000 else 0.0
         
-        # Drag (Always opposes velocity vector)
+        # Drag (Always opposes velocity vector, with Mach-dependent Cd)
         v = np.sqrt(vx**2 + vz**2)
-        D = 0.5 * rho * v**2 * self.cd * self.area
+        
+        # Mach and Cd calculation
+        mach = v / 340.0
+        if mach < 0.8:
+            cd_val = 0.3
+        elif mach < 1.2:
+            cd_val = 0.3 + 0.3 * (mach - 0.8) / 0.4
+        elif mach < 2.0:
+            cd_val = 0.6 - 0.2 * (mach - 1.2) / 0.8
+        else:
+            cd_val = 0.25 + 0.3 / mach
+            
+        D = 0.5 * rho * v**2 * cd_val * self.area
         
         # Pitch Control (Gravity Turn Optimizado)
         # 90 deg al inicio, curva gradual hacia 0 deg (horizontal)
-        if z < 1000: # Despegue vertical inicial
+        if z_safe < 1000: # Despegue vertical inicial
             theta = np.pi / 2
         else:
             # Perfil de pitch más técnico: se inclina según la altitud para ganar velocidad orbital
             # A 150km ya debería ser casi horizontal para orbitar/escapar
-            theta = np.pi / 2 * np.exp(-(z-1000) / 80000.0)
+            theta = np.pi / 2 * np.exp(-(z_safe-1000) / 80000.0)
             theta = max(0.02, theta) # Nunca 0 absoluto para mantener componente radial
             
         # Equations of motion in a local vertical frame (Polar-like)
@@ -107,6 +126,58 @@ class EarthRocketPhysics(PhysicsModel):
             
         return np.array([vx, vz, dvx, dvz])
 
+    def get_telemetry_vars(self, state, thrust, current_mass):
+        x, z, vx, vz = state[:4]
+        z_safe = max(0.0, z)
+        v = np.sqrt(vx**2 + vz**2)
+        
+        # Gravity
+        r = self.Re + z_safe
+        
+        # Density
+        rho = self.rho0 * np.exp(-z_safe / self.H) if z_safe < 120000 else 0.0
+        
+        # Mach and Cd
+        mach = v / 340.0
+        if mach < 0.8:
+            cd_val = 0.3
+        elif mach < 1.2:
+            cd_val = 0.3 + 0.3 * (mach - 0.8) / 0.4
+        elif mach < 2.0:
+            cd_val = 0.6 - 0.2 * (mach - 1.2) / 0.8
+        else:
+            cd_val = 0.25 + 0.3 / mach
+            
+        D = 0.5 * rho * v**2 * cd_val * self.area
+        q_val = 0.5 * rho * v**2
+        
+        # Pitch
+        if z_safe < 1000:
+            theta = np.pi / 2
+        else:
+            theta = np.pi / 2 * np.exp(-(z_safe-1000) / 80000.0)
+            theta = max(0.02, theta)
+            
+        # Felt acceleration (non-gravitational)
+        if z_safe <= 0.0 and thrust == 0.0 and v < 1e-3:
+            g_force = 1.0  # standing on the ground
+        else:
+            if v < 1e-6:
+                ax_felt = (thrust * np.cos(theta)) / current_mass
+                az_felt = (thrust * np.sin(theta)) / current_mass
+            else:
+                ax_felt = (thrust * np.cos(theta) - D * (vx / v)) / current_mass
+                az_felt = (thrust * np.sin(theta) - D * (vz / v)) / current_mass
+                
+            a_felt = np.sqrt(ax_felt**2 + az_felt**2)
+            g_force = a_felt / 9.81
+            
+            # If on ground, normal force provides 1G support
+            if z_safe <= 0.0 and g_force < 1.0:
+                g_force = 1.0
+                
+        return g_force, q_val, cd_val
+
 
 # --- 4. FACADE / ENGINE: Orchestrates the Simulation ---
 
@@ -120,6 +191,8 @@ class SimulationEngine:
         all_times = []
         all_states = []
         all_stages = []
+        all_g = []
+        all_q = []
         
         t = 0.0
         # Initial State: x, z, vx, vz
@@ -137,8 +210,8 @@ class SimulationEngine:
                 m = self.rocket.get_current_mass(idx, current_prop)
                 
                 # We wrap the derivative to inject current mass
-                def f_wrap(t_val, s_val):
-                    return self.physics.get_derivatives(t_val, s_val, stage.thrust, stage.burn_rate, m)
+                def f_wrap(t_val, s_val, _thrust=stage.thrust, _br=stage.burn_rate, _m=m):
+                    return self.physics.get_derivatives(t_val, s_val, _thrust, _br, _m)
                 
                 new_state = self.integrator.step(f_wrap, t, state, dt)
                 
@@ -153,9 +226,14 @@ class SimulationEngine:
                 if state[1] < 0: # Ground contact
                     state[1] = 0; state[3] = 0
                 
+                # Compute telemetry
+                g_force, q_val, cd_val = self.physics.get_telemetry_vars(state, stage.thrust, m)
+                
                 all_times.append(t)
                 all_states.append(list(state) + [m])
                 all_stages.append(stage.name)
+                all_g.append(g_force)
+                all_q.append(q_val)
         
         # Ballistic phase
         t_final = t + t_ballistic
@@ -163,8 +241,8 @@ class SimulationEngine:
             dt = min(h_step, t_final - t)
             m = self.rocket.payload_mass
             
-            def f_bal(t_val, s_val):
-                return self.physics.get_derivatives(t_val, s_val, 0.0, 0.0, m)
+            def f_bal(t_val, s_val, _m=m):
+                return self.physics.get_derivatives(t_val, s_val, 0.0, 0.0, _m)
             
             new_state = self.integrator.step(f_bal, t, state, dt)
             
@@ -176,10 +254,23 @@ class SimulationEngine:
             
             if state[1] < 0: # Ground contact (CRITICAL FIX)
                 state[1] = 0; state[3] = 0; state[2] *= 0.9 # Friction
+                # Compute telemetry
+                g_force, q_val, cd_val = self.physics.get_telemetry_vars(state, 0.0, m)
+                # Register the final contact point and exit ballistic loop
+                all_times.append(t)
+                all_states.append(list(state) + [m])
+                all_stages.append("Carga Útil")
+                all_g.append(g_force)
+                all_q.append(q_val)
+                break
             
+            # Compute telemetry
+            g_force, q_val, cd_val = self.physics.get_telemetry_vars(state, 0.0, m)
             all_times.append(t)
             all_states.append(list(state) + [m])
             all_stages.append("Carga Útil")
+            all_g.append(g_force)
+            all_q.append(q_val)
 
         return {
             't': np.array(all_times),
@@ -188,5 +279,7 @@ class SimulationEngine:
             'vx': np.array([s[2] for s in all_states]),
             'vz': np.array([s[3] for s in all_states]),
             'm': np.array([s[4] for s in all_states]),
-            'etapa': all_stages
+            'etapa': all_stages,
+            'g_force': np.array(all_g),
+            'q': np.array(all_q)
         }
